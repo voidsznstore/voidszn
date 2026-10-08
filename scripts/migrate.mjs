@@ -10,7 +10,8 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
 
-const url = process.env.DATABASE_URL;
+// Hosting integrations name this differently, so accept the common ones.
+const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 const vercelEnv = process.env.VERCEL_ENV;
 
 if (!url) {

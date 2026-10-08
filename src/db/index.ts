@@ -14,7 +14,8 @@ const globalForDb = globalThis as unknown as { voidsznPool?: Pool; voidsznDb?: D
 export function getDb(): Database {
   if (globalForDb.voidsznDb) return globalForDb.voidsznDb;
 
-  const connectionString = process.env.DATABASE_URL;
+  // Hosting integrations name this differently, so accept the common ones.
+  const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
   if (!connectionString) {
     throw new Error("DATABASE_URL is not set. Copy .env.example to .env.local and fill it in.");
   }
