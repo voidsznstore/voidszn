@@ -43,6 +43,10 @@ npm run dev                  # http://localhost:3000
 
 Migrations are plain SQL files in git. Nothing is ever pushed to the database without one.
 
+Production deploys apply pending migrations automatically before the build
+(`scripts/migrate.mjs`). Preview deploys never touch the database. If a migration fails,
+the build fails and the previous version of the site stays live.
+
 ## Rules this codebase follows
 
 - **Money is integer cents.** Format it only with `src/lib/money.ts`.
