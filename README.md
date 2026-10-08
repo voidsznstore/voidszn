@@ -65,7 +65,7 @@ Migrations are plain SQL files in git. Nothing is ever pushed to the database wi
 - [x] 2. Homepage, product page and cart designs
 - [x] 3. Project scaffold
 - [x] 4. Database schema and first migration
-- [ ] 5. Storefront and cart
+- [ ] 5. Storefront and cart (homepage and product page are up with sample products from `src/lib/catalog.ts`; cart and database-backed catalog still to do)
 - [ ] 6. Checkout and payments
 - [ ] 7. Admin panel
 - [ ] 8. Fulfillment module

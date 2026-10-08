@@ -8,6 +8,8 @@
   --color-void: #0a0a0a; /* page background */
   --color-ash: #1a1a1a; /* image wells, raised surfaces */
   --color-ash-soft: #141414; /* panels */
+  --color-well: #242424; /* behind product images */
+  --color-well-hover: #2b2b2b;
   --color-line: #2a2a2a; /* hairlines */
   --color-line-strong: #5a5a5a; /* input and button outlines */
   --color-smoke: #a3a3a3; /* secondary text */
@@ -52,7 +54,7 @@
 }
 
 @layer components {
-  /* Small spaced label: SZN 01, prices, section tags */
+  /* Small spaced label: category tags, prices, section tags */
   .label {
     font-family: var(--font-mono);
     font-weight: 500;

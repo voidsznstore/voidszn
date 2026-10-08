@@ -133,22 +133,6 @@ export const storeSettings = pgTable("store_settings", {
 /* Catalog                                                             */
 /* ------------------------------------------------------------------ */
 
-/** A drop is a numbered season: SZN 01, SZN 02. */
-export const drops = pgTable("drops", {
-  id: id(),
-  number: integer("number").notNull().unique(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  tagline: text("tagline"),
-  description: text("description"),
-  heroImageUrl: text("hero_image_url"),
-  startsAt: timestamp("starts_at", { withTimezone: true }),
-  endsAt: timestamp("ends_at", { withTimezone: true }),
-  isActive: boolean("is_active").notNull().default(false),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
-
 export const categories = pgTable("categories", {
   id: id(),
   name: text("name").notNull(),
@@ -174,7 +158,6 @@ export const products = pgTable(
     seoTitle: text("seo_title"),
     seoDescription: text("seo_description"),
     categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
-    dropId: uuid("drop_id").references(() => drops.id, { onDelete: "set null" }),
     /** Lowest variant price, shown on cards. The variant price is what gets charged. */
     priceCents: integer("price_cents").notNull(),
     compareAtPriceCents: integer("compare_at_price_cents"),
@@ -191,7 +174,6 @@ export const products = pgTable(
   (t) => [
     index("products_active_sort_idx").on(t.isActive, t.sortOrder),
     index("products_category_idx").on(t.categoryId),
-    index("products_drop_idx").on(t.dropId),
     check("products_price_nonneg", sql`${t.priceCents} >= 0`),
   ],
 );
@@ -597,17 +579,12 @@ export const reviews = pgTable(
 /* Relations                                                           */
 /* ------------------------------------------------------------------ */
 
-export const dropsRelations = relations(drops, ({ many }) => ({
-  products: many(products),
-}));
-
 export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
 }));
 
 export const productsRelations = relations(products, ({ one, many }) => ({
   category: one(categories, { fields: [products.categoryId], references: [categories.id] }),
-  drop: one(drops, { fields: [products.dropId], references: [drops.id] }),
   colors: many(productColors),
   images: many(productImages),
   variants: many(productVariants),

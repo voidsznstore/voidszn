@@ -135,23 +135,6 @@ CREATE TABLE "discount_redemptions" (
 	CONSTRAINT "discount_redemptions_order_id_unique" UNIQUE("order_id")
 );
 --> statement-breakpoint
-CREATE TABLE "drops" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"number" integer NOT NULL,
-	"name" text NOT NULL,
-	"slug" text NOT NULL,
-	"tagline" text,
-	"description" text,
-	"hero_image_url" text,
-	"starts_at" timestamp with time zone,
-	"ends_at" timestamp with time zone,
-	"is_active" boolean DEFAULT false NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "drops_number_unique" UNIQUE("number"),
-	CONSTRAINT "drops_slug_unique" UNIQUE("slug")
-);
---> statement-breakpoint
 CREATE TABLE "order_events" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"order_id" uuid NOT NULL,
@@ -280,7 +263,6 @@ CREATE TABLE "products" (
 	"seo_title" text,
 	"seo_description" text,
 	"category_id" uuid,
-	"drop_id" uuid,
 	"price_cents" integer NOT NULL,
 	"compare_at_price_cents" integer,
 	"is_active" boolean DEFAULT false NOT NULL,
@@ -365,7 +347,6 @@ ALTER TABLE "product_images" ADD CONSTRAINT "product_images_color_id_product_col
 ALTER TABLE "product_variants" ADD CONSTRAINT "product_variants_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "product_variants" ADD CONSTRAINT "product_variants_color_id_product_colors_id_fk" FOREIGN KEY ("color_id") REFERENCES "public"."product_colors"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "products" ADD CONSTRAINT "products_category_id_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."categories"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "products" ADD CONSTRAINT "products_drop_id_drops_id_fk" FOREIGN KEY ("drop_id") REFERENCES "public"."drops"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "reviews" ADD CONSTRAINT "reviews_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "reviews" ADD CONSTRAINT "reviews_order_id_orders_id_fk" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "abandoned_carts_status_idx" ON "abandoned_carts" USING btree ("status","created_at");--> statement-breakpoint
@@ -384,6 +365,5 @@ CREATE INDEX "product_images_product_idx" ON "product_images" USING btree ("prod
 CREATE UNIQUE INDEX "product_variants_product_color_size_uq" ON "product_variants" USING btree ("product_id","color_id","size");--> statement-breakpoint
 CREATE INDEX "products_active_sort_idx" ON "products" USING btree ("is_active","sort_order");--> statement-breakpoint
 CREATE INDEX "products_category_idx" ON "products" USING btree ("category_id");--> statement-breakpoint
-CREATE INDEX "products_drop_idx" ON "products" USING btree ("drop_id");--> statement-breakpoint
 CREATE INDEX "reviews_product_status_idx" ON "reviews" USING btree ("product_id","status");--> statement-breakpoint
 CREATE UNIQUE INDEX "webhook_events_provider_event_uq" ON "webhook_events" USING btree ("provider","event_id");
