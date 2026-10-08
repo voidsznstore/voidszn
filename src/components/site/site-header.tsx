@@ -5,10 +5,6 @@ import { headerLinks } from "@/lib/navigation";
 export function SiteHeader() {
   return (
     <>
-      <div className="label flex min-h-9 items-center justify-center bg-accent px-4 py-1.5 text-center text-xs text-on-accent">
-        Printed to order
-      </div>
-
       <header className="border-b border-line">
         <div className="mx-auto grid max-w-site grid-cols-[1fr_auto_1fr] items-center gap-x-4 px-4 py-3 sm:px-10">
           <nav
