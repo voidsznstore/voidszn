@@ -5,7 +5,12 @@ import { ProductCard } from "@/components/product/product-card";
 import { ProductView } from "@/components/product/product-view";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
-import { getProductBySlug, getProducts, getRelatedProducts } from "@/lib/catalog";
+import {
+  getProductBySlug,
+  getProductType,
+  getProducts,
+  getRelatedProducts,
+} from "@/lib/catalog";
 
 export function generateStaticParams() {
   return getProducts().map((product) => ({ slug: product.slug }));
@@ -25,6 +30,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
   const product = getProductBySlug(slug);
   if (!product) notFound();
 
+  const type = getProductType(product);
   const related = getRelatedProducts(product.slug);
 
   return (
@@ -40,14 +46,17 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
             Home
           </Link>
           <span aria-hidden="true">/</span>
-          <Link href="/#shop" className="inline-flex min-h-11 items-center hover:text-bone">
-            {product.category}
+          <Link
+            href={`/collections/${type?.slug ?? "all"}`}
+            className="inline-flex min-h-11 items-center hover:text-bone"
+          >
+            {type?.name ?? "Shop All"}
           </Link>
           <span aria-hidden="true">/</span>
           <span className="text-bone">{product.name}</span>
         </nav>
 
-        <ProductView product={product} />
+        <ProductView product={product} typeName={type?.name ?? "Shop"} />
 
         {related.length > 0 ? (
           <section className="pt-20">

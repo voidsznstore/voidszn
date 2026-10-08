@@ -72,6 +72,67 @@
     text-transform: uppercase;
   }
 
+  /* Long-form text on help and policy pages */
+  .prose-site {
+    color: var(--color-bone-dim);
+    font-size: 1.0625rem;
+    line-height: 1.65;
+  }
+
+  .prose-site > * + * {
+    margin-top: 1rem;
+  }
+
+  .prose-site h2 {
+    margin-top: 2.75rem;
+    color: #fff;
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 1.875rem;
+    line-height: 1.1;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .prose-site h3 {
+    margin-top: 1.75rem;
+    color: var(--color-bone);
+    font-size: 1.0625rem;
+    font-weight: 600;
+  }
+
+  .prose-site ul,
+  .prose-site ol {
+    padding-left: 1.25rem;
+  }
+
+  .prose-site ul {
+    list-style: disc;
+  }
+
+  .prose-site ol {
+    list-style: decimal;
+  }
+
+  .prose-site li + li {
+    margin-top: 0.375rem;
+  }
+
+  .prose-site a {
+    color: var(--color-bone);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .prose-site a:hover {
+    color: #fff;
+  }
+
+  .prose-site strong {
+    color: var(--color-bone);
+    font-weight: 600;
+  }
+
   .btn {
     display: inline-flex;
     align-items: center;

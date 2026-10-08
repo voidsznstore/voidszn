@@ -2,13 +2,24 @@
 
 import { useState } from "react";
 import type { CatalogProduct } from "@/lib/catalog";
+import Link from "next/link";
 import { formatMoney } from "@/lib/money";
+import { siteConfig } from "@/lib/site-config";
 import { TeeMockup } from "./tee-mockup";
 
 type View = "front" | "back";
 const VIEWS: View[] = ["front", "back"];
 
-export function ProductView({ product }: { product: CatalogProduct }) {
+const { shipping, orders } = siteConfig;
+const SHIPPING_NOTE = `Made for you after you order, usually within ${shipping.productionDays} business days. Standard shipping then takes ${shipping.transitDays} business days, with tracking sent by email.`;
+
+type ProductViewProps = {
+  product: CatalogProduct;
+  /** Product type shown above the title, e.g. "T-Shirts". */
+  typeName: string;
+};
+
+export function ProductView({ product, typeName }: ProductViewProps) {
   const [colorIndex, setColorIndex] = useState(0);
   const [size, setSize] = useState<string | null>(null);
   const [view, setView] = useState<View>("front");
@@ -67,7 +78,7 @@ export function ProductView({ product }: { product: CatalogProduct }) {
       {/* Details */}
       <div className="flex flex-col gap-7">
         <div className="flex flex-col gap-3">
-          <p className="label text-accent">{product.category}</p>
+          <p className="label text-accent">{typeName}</p>
           <h1 className="display text-[clamp(2.5rem,5vw,3.75rem)] text-white">{product.name}</h1>
           <p className="font-mono text-2xl text-white">{formatMoney(product.priceCents)}</p>
           <p className="text-bone-dim">{product.description}</p>
@@ -127,7 +138,11 @@ export function ProductView({ product }: { product: CatalogProduct }) {
               Size guide
             </summary>
             <p className="pb-2 text-bone-dim">
-              Sample product. Chest and length measurements for each size go here.
+              Sample product. Chest and length measurements for each size go here. See{" "}
+              <Link href="/size-guide" className="underline underline-offset-4">
+                how to measure
+              </Link>
+              .
             </p>
           </details>
         </fieldset>
@@ -147,7 +162,7 @@ export function ProductView({ product }: { product: CatalogProduct }) {
 
         <div className="flex flex-col gap-1 border border-line bg-ash-soft px-[1.125rem] py-4">
           <p className="font-semibold">Printed to order</p>
-          <p className="text-[0.9375rem] text-bone-dim">{product.shipping}</p>
+          <p className="text-[0.9375rem] text-bone-dim">{SHIPPING_NOTE}</p>
         </div>
 
         <div className="border-t border-line">
@@ -171,7 +186,20 @@ export function ProductView({ product }: { product: CatalogProduct }) {
             <summary className="flex min-h-[3.25rem] cursor-pointer items-center font-semibold">
               Shipping and returns
             </summary>
-            <p className="pb-4 text-[0.9375rem] text-bone-dim">{product.shipping}</p>
+            <p className="pb-4 text-[0.9375rem] text-bone-dim">
+              {SHIPPING_NOTE} Every item is made to order, so we can&apos;t take returns for a
+              change of mind or a wrong size. If it arrives damaged, defective or wrong, tell us
+              within {orders.issueWindowDays} days and we&apos;ll replace or refund it. Full
+              details:{" "}
+              <Link href="/shipping" className="underline underline-offset-4">
+                shipping
+              </Link>{" "}
+              and{" "}
+              <Link href="/returns" className="underline underline-offset-4">
+                returns
+              </Link>
+              .
+            </p>
           </details>
         </div>
       </div>

@@ -3,7 +3,7 @@ import { ProductCard } from "@/components/product/product-card";
 import { TeeMockup } from "@/components/product/tee-mockup";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
-import { getProducts } from "@/lib/catalog";
+import { getCategories, getCollectionProducts, getProducts } from "@/lib/catalog";
 
 const PROMISES = ["Printed to order", "Tracked shipping", "Secure checkout"];
 
@@ -11,6 +11,9 @@ export default function HomePage() {
   const products = getProducts();
   const featured = products[0];
   const featuredColor = featured.colors[0];
+  const justIn = getCollectionProducts("just-in").slice(0, 4);
+  const productTypes = getCategories("PRODUCT_TYPE");
+  const interests = getCategories("INTEREST");
 
   return (
     <>
@@ -21,16 +24,19 @@ export default function HomePage() {
         <section className="border-b border-line bg-ash">
           <div className="mx-auto grid max-w-site items-center gap-10 px-4 py-14 sm:px-10 lg:grid-cols-[1.15fr_0.85fr] lg:py-20">
             <div className="flex flex-col gap-6">
-              <p className="label text-accent">New arrivals</p>
+              <p className="label text-accent">Just in</p>
               <h1 className="display text-[clamp(3.5rem,10vw,8.5rem)] text-white">
                 Nothing is in season
               </h1>
               <p className="max-w-md text-lg text-bone-dim">
-                Printed when you order. No logos on the clothes.
+                Graphic tees and more, printed when you order.
               </p>
               <div className="flex flex-wrap gap-3">
-                <Link href="#shop" className="btn btn-accent">
-                  Shop now
+                <Link href="/collections/all" className="btn btn-accent">
+                  Shop all
+                </Link>
+                <Link href="/collections/best-sellers" className="btn btn-outline">
+                  Best sellers
                 </Link>
               </div>
             </div>
@@ -62,25 +68,53 @@ export default function HomePage() {
           </ul>
         </div>
 
-        <section id="shop" className="mx-auto max-w-site scroll-mt-6 px-4 py-20 sm:px-10">
-          <h2 className="display mb-7 text-5xl text-white">New arrivals</h2>
+        <section className="mx-auto max-w-site px-4 pt-20 sm:px-10">
+          <div className="mb-7 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+            <h2 className="display text-5xl text-white">Just in</h2>
+            <Link
+              href="/collections/just-in"
+              className="inline-flex min-h-11 items-center text-sm font-semibold underline underline-offset-4 hover:text-white"
+            >
+              View all
+            </Link>
+          </div>
           <div className="grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-4">
-            {products.map((product) => (
+            {justIn.map((product) => (
               <ProductCard key={product.slug} product={product} />
             ))}
           </div>
         </section>
 
-        <section className="bg-bone text-void">
-          <div className="mx-auto flex max-w-site flex-col gap-6 px-4 py-24 sm:px-10">
-            <h2 className="display text-[clamp(2.75rem,7vw,6.5rem)]">
-              No logos. Nothing to prove.
-            </h2>
-            <p className="max-w-xl text-lg">
-              We don&apos;t put our name on the clothes. The design is the point, and it&apos;s
-              printed when you order it.
-            </p>
-          </div>
+        <section className="mx-auto max-w-site px-4 pt-20 sm:px-10">
+          <h2 className="display mb-7 text-5xl text-white">Shop by category</h2>
+          <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {productTypes.map((category) => (
+              <li key={category.slug}>
+                <Link
+                  href={`/collections/${category.slug}`}
+                  className="flex min-h-36 flex-col justify-end border border-line bg-ash-soft p-5 transition-colors hover:border-bone"
+                >
+                  <span className="display text-3xl text-white sm:text-4xl">{category.name}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="mx-auto max-w-site px-4 py-20 sm:px-10">
+          <h2 className="display mb-7 text-5xl text-white">Shop by interest</h2>
+          <ul className="flex flex-wrap gap-3">
+            {interests.map((category) => (
+              <li key={category.slug}>
+                <Link
+                  href={`/collections/${category.slug}`}
+                  className="inline-flex min-h-12 items-center border border-line-strong px-5 text-sm font-semibold uppercase tracking-[0.06em] transition-colors hover:border-bone hover:bg-bone hover:text-void"
+                >
+                  {category.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       </main>
 

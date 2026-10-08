@@ -53,6 +53,12 @@ Migrations are plain SQL files in git. Nothing is ever pushed to the database wi
 - **Discount limits are enforced in the database.** See `src/db/queries/discounts.ts`.
 - **Payment and fulfillment are provider-neutral.** Fields are named `paymentRef`, `externalOrderId` and so on, so either provider can be swapped.
 
+## Project docs
+
+- `docs/backend-notes.md`: requirements for the backend and admin, including sorting and filtering by category
+- `docs/launch-checklist.md`: legal and compliance checklist to clear before taking real orders
+- `src/lib/site-config.ts`: business details and policy terms used by every page
+
 ## Brand
 
 - Logo: Eclipse wordmark, `src/components/brand/eclipse-logo.tsx`
@@ -65,7 +71,7 @@ Migrations are plain SQL files in git. Nothing is ever pushed to the database wi
 - [x] 2. Homepage, product page and cart designs
 - [x] 3. Project scaffold
 - [x] 4. Database schema and first migration
-- [ ] 5. Storefront and cart (homepage and product page are up with sample products from `src/lib/catalog.ts`; cart and database-backed catalog still to do)
+- [ ] 5. Storefront and cart (homepage, category pages, product page and help and policy pages are up with sample products from `src/lib/catalog.ts`; cart and database-backed catalog still to do)
 - [ ] 6. Checkout and payments
 - [ ] 7. Admin panel
 - [ ] 8. Fulfillment module

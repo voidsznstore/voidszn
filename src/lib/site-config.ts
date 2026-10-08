@@ -1,0 +1,47 @@
+/**
+ * Business details and policy terms used across the footer, policy pages and emails.
+ *
+ * Anything in [SQUARE BRACKETS] is not filled in yet and shows on the site exactly
+ * like that. Fill every one before launch. `unfilledSiteConfig()` lists what is left.
+ *
+ * The policy terms below mirror what the print supplier publishes, so the store
+ * never promises a customer more than the supplier will back. Change them here and
+ * every page updates.
+ */
+export const siteConfig = {
+  name: "VOIDSZN",
+  /** Registered legal name of the business, e.g. "Voidszn LLC". */
+  legalName: "[LEGAL BUSINESS NAME]",
+  /** Physical mailing address. Required in marketing emails by CAN-SPAM. */
+  mailingAddress: "[BUSINESS MAILING ADDRESS]",
+  supportEmail: "[SUPPORT EMAIL]",
+  /** Where infringement notices go. Can be the same inbox as support. */
+  legalEmail: "[LEGAL EMAIL]",
+  /** State whose law governs the terms. */
+  governingState: "[GOVERNING STATE]",
+  policiesUpdated: "October 8, 2026",
+
+  shipping: {
+    regions: "the United States",
+    /** Business days to print and pack before the order ships. */
+    productionDays: "1 to 3",
+    /** Business days in transit with standard shipping. */
+    transitDays: "2 to 5",
+  },
+
+  orders: {
+    /** How long after ordering a customer can still cancel. */
+    cancelWindow: "1 hour",
+    /** Days after delivery to report a damaged, defective or wrong item. */
+    issueWindowDays: 30,
+    /** Business days to process a refund or send a replacement once approved. */
+    refundDays: 10,
+  },
+} as const;
+
+/** Names of the fields that still hold a [PLACEHOLDER]. Empty when ready to launch. */
+export function unfilledSiteConfig(): string[] {
+  return Object.entries(siteConfig)
+    .filter(([, value]) => typeof value === "string" && value.startsWith("["))
+    .map(([key]) => key);
+}

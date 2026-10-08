@@ -18,6 +18,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -56,6 +57,12 @@ export type CartSnapshotItem = {
 /* ------------------------------------------------------------------ */
 
 export const adminRole = pgEnum("admin_role", ["OWNER", "STAFF"]);
+
+/**
+ * PRODUCT_TYPE is what the item is (T-Shirts, Hoodies). INTEREST is what the
+ * design is about (Anime, Gaming). A product has one type and any number of interests.
+ */
+export const categoryKind = pgEnum("category_kind", ["PRODUCT_TYPE", "INTEREST"]);
 
 export const fulfillmentProvider = pgEnum("fulfillment_provider", ["MANUAL", "PRINTMOOD"]);
 
@@ -133,17 +140,22 @@ export const storeSettings = pgTable("store_settings", {
 /* Catalog                                                             */
 /* ------------------------------------------------------------------ */
 
-export const categories = pgTable("categories", {
-  id: id(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  description: text("description"),
-  imageUrl: text("image_url"),
-  sortOrder: integer("sort_order").notNull().default(0),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const categories = pgTable(
+  "categories",
+  {
+    id: id(),
+    kind: categoryKind("kind").notNull(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    description: text("description"),
+    imageUrl: text("image_url"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("categories_kind_sort_idx").on(t.kind, t.sortOrder)],
+);
 
 export const products = pgTable(
   "products",
@@ -157,7 +169,6 @@ export const products = pgTable(
     fitText: text("fit_text"), // fit notes, model size
     seoTitle: text("seo_title"),
     seoDescription: text("seo_description"),
-    categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
     /** Lowest variant price, shown on cards. The variant price is what gets charged. */
     priceCents: integer("price_cents").notNull(),
     compareAtPriceCents: integer("compare_at_price_cents"),
@@ -173,8 +184,31 @@ export const products = pgTable(
   },
   (t) => [
     index("products_active_sort_idx").on(t.isActive, t.sortOrder),
-    index("products_category_idx").on(t.categoryId),
+    index("products_created_idx").on(t.createdAt),
     check("products_price_nonneg", sql`${t.priceCents} >= 0`),
+  ],
+);
+
+/**
+ * Which categories a product is in. Many to many, so one tee can be in
+ * T-Shirts, Gaming and Halloween at once. The second index makes
+ * "all products in this category" fast for the storefront and the admin list.
+ */
+export const productCategories = pgTable(
+  "product_categories",
+  {
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "cascade" }),
+    /** Position of the product inside this category, for hand-ordered category pages. */
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.productId, t.categoryId] }),
+    index("product_categories_category_idx").on(t.categoryId, t.sortOrder),
   ],
 );
 
@@ -580,11 +614,19 @@ export const reviews = pgTable(
 /* ------------------------------------------------------------------ */
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
-  products: many(products),
+  productCategories: many(productCategories),
 }));
 
-export const productsRelations = relations(products, ({ one, many }) => ({
-  category: one(categories, { fields: [products.categoryId], references: [categories.id] }),
+export const productCategoriesRelations = relations(productCategories, ({ one }) => ({
+  product: one(products, { fields: [productCategories.productId], references: [products.id] }),
+  category: one(categories, {
+    fields: [productCategories.categoryId],
+    references: [categories.id],
+  }),
+}));
+
+export const productsRelations = relations(products, ({ many }) => ({
+  productCategories: many(productCategories),
   colors: many(productColors),
   images: many(productImages),
   variants: many(productVariants),
