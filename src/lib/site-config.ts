@@ -48,18 +48,6 @@ export const siteConfig = {
     fallbackRate: { first: 649, additional: 125 },
   },
 
-  /**
-   * Stripe product tax codes by product type, from https://docs.stripe.com/tax/tax-codes.
-   * Clothing is taxed differently from general goods in several states, so the
-   * code matters. Confirm these with a tax advisor before taking live payments.
-   */
-  taxCodes: {
-    "t-shirts": "txcd_30011000", // Clothing & Footwear
-    crewnecks: "txcd_30011000",
-    hoodies: "txcd_30011000",
-    hats: "txcd_30060006", // Hats
-  } as Record<string, string>,
-
   orders: {
     /** How long after ordering a customer can still cancel. */
     cancelWindow: "1 hour",

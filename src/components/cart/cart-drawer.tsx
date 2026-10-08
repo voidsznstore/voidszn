@@ -6,10 +6,8 @@ import { TeeMockup } from "@/components/product/tee-mockup";
 import { MAX_QUANTITY, removeFromCart, setQuantity, useCart } from "@/lib/cart-store";
 import { getProducts } from "@/lib/catalog";
 import { formatMoney } from "@/lib/money";
+import { siteConfig } from "@/lib/site-config";
 import { useCartUi } from "./cart-provider";
-
-// Checkout only opens once the store has its payment keys.
-const checkoutIsOpen = Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
 export function CartDrawer() {
   const { isOpen, closeCart } = useCartUi();
@@ -181,30 +179,22 @@ export function CartDrawer() {
                 <span className="font-mono text-lg text-white">{formatMoney(subtotalCents)}</span>
               </div>
               <p className="text-[0.8125rem] text-smoke">
-                Shipping and tax are calculated at checkout.
+                Shipping is added at checkout.
               </p>
-              {checkoutIsOpen ? (
-                <Link
-                  href="/checkout"
-                  onClick={closeCart}
-                  className="btn btn-accent min-h-[3.625rem] w-full text-[1.0625rem]"
-                >
-                  Checkout
+              <Link
+                href="/checkout"
+                onClick={closeCart}
+                className="btn btn-accent min-h-[3.625rem] w-full text-[1.0625rem]"
+              >
+                Checkout
+              </Link>
+              <p className="text-center text-[0.8125rem] text-smoke">
+                Printed to order. Damaged or wrong items are replaced or refunded within{" "}
+                {siteConfig.orders.issueWindowDays} days.{" "}
+                <Link href="/returns" onClick={closeCart} className="underline underline-offset-4">
+                  Returns policy
                 </Link>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    disabled
-                    className="btn btn-accent min-h-[3.625rem] w-full text-[1.0625rem] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Checkout
-                  </button>
-                  <p className="text-center text-[0.8125rem] text-smoke">
-                    Checkout is opening soon.
-                  </p>
-                </>
-              )}
+              </p>
             </div>
           </>
         )}

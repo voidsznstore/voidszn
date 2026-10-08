@@ -13,8 +13,8 @@ advice. Have a lawyer read the policy pages before the store takes real orders.
       not promise more than the supplier backs.
 - [ ] Business registration and a business bank account.
 - [ ] Sales tax: register with the state revenue department where the business is based
-      and collect tax on orders shipped there. Turn on automatic tax calculation in the
-      payment processor and watch for other states' thresholds as sales grow.
+      and collect tax on orders shipped there (see the Payments section for what that
+      needs in checkout), and watch for other states' thresholds as sales grow.
 - [ ] Lawyer review of Privacy, Terms, Returns, Shipping and IP pages.
 
 ## Shipping promises (FTC Mail, Internet or Telephone Order Rule)
@@ -67,26 +67,20 @@ advice. Have a lawyer read the policy pages before the store takes real orders.
 - [ ] Refund and cancellation terms are visible before payment.
 - [ ] Statement descriptor shows a name customers will recognize.
 
-### Switching Stripe from sandbox to live
+### Switching Square from sandbox to live
 
-The site runs on sandbox keys until every item here is done.
+The site runs on the Sandbox access token until every item here is done.
 
-- [ ] Stripe account fully activated (business details and bank account).
-- [ ] Stripe Tax: head office address saved, and a tax registration added in Stripe for
-      every state where the business is registered to collect. Checkout only charges
-      tax where a registration exists. With none, it charges no tax and shows no error.
-      Never add a registration in Stripe for a state the business has not actually
-      registered with.
-- [ ] Tax codes in `site-config.ts` confirmed against https://docs.stripe.com/tax/tax-codes
-      (clothing is taxed differently from general goods in several states).
-- [ ] Create a restricted key (`rk_live_...`) for the site instead of the full secret
-      key. It needs write access to Checkout Sessions and read access to Tax settings.
-- [ ] Create a live webhook endpoint for `https://www.voidszn.com/api/webhooks/stripe`
-      with the same three events as the sandbox one. It has its own signing secret.
-- [ ] Put the live key, live publishable key and live signing secret in Vercel
-      (Production only). Keep the sandbox ones on Preview.
-- [ ] Register `www.voidszn.com` as a payment method domain in Stripe so Apple Pay and
-      Google Pay show up.
-- [ ] Set brand colors and logo in Stripe's branding settings. The embedded checkout
-      form takes its look from there.
+- [ ] Square account fully activated (identity verified, bank account linked).
+- [ ] In Vercel, replace `SQUARE_ACCESS_TOKEN` with the Production access token from the
+      same Square application, then redeploy. Nothing else changes: the store detects
+      live mode, finds the location and registers the live webhook by itself.
+- [ ] Open `/api/health` and confirm it says `"payments":"production"` and
+      `"webhook":"ok"`.
+- [ ] Sales tax. Checkout charges no tax today. Square's payment page does not work
+      tax out from the delivery address, so before collecting tax: register with the
+      state, then have checkout ask for the address first and add the tax line to the
+      order. Never charge tax for a state the business is not registered in.
+- [ ] Set the business name, logo and colors in Square (Account & Settings), which is
+      what the payment page and receipts show.
 - [ ] Place one real order and refund it.

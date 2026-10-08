@@ -30,7 +30,7 @@ export type PricedLine = {
   quantity: number;
   unitPriceCents: number;
   product: CatalogProduct;
-  /** Product type slug, e.g. "t-shirts". Drives the shipping rate and tax code. */
+  /** Product type slug, e.g. "t-shirts". Drives the shipping rate. */
   typeSlug: string | null;
 };
 
@@ -105,69 +105,4 @@ export function shippingFor(lines: Pick<PricedLine, "typeSlug" | "quantity">[]):
     if (rate.first > first.first) first = rate;
   }
   return first.first + additionalTotal - first.additional;
-}
-
-/* ------------------------------------------------------------------ */
-/* Carrying the cart through the payment processor                     */
-/* ------------------------------------------------------------------ */
-
-/**
- * The paid cart rides along on the checkout session as metadata, so the order can
- * be written from the payment confirmation alone. Values are limited to 500
- * characters each, so the cart is split across numbered keys.
- */
-const CHUNK_SIZE = 450;
-const CART_KEY = "cart";
-
-export type CartSnapshotLine = {
-  slug: string;
-  color: string;
-  size: string;
-  quantity: number;
-  unitPriceCents: number;
-};
-
-export function encodeCart(lines: CartSnapshotLine[]): Record<string, string> {
-  const json = JSON.stringify(
-    lines.map((line) => [line.slug, line.color, line.size, line.quantity, line.unitPriceCents]),
-  );
-  const metadata: Record<string, string> = {};
-  for (let index = 0; index * CHUNK_SIZE < json.length; index++) {
-    metadata[`${CART_KEY}_${index}`] = json.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE);
-  }
-  return metadata;
-}
-
-const snapshotSchema = z.array(
-  z.tuple([
-    z.string(),
-    z.string(),
-    z.string(),
-    z.number().int().positive(),
-    z.number().int().nonnegative(),
-  ]),
-);
-
-export function decodeCart(
-  metadata: Record<string, string> | null | undefined,
-): CartSnapshotLine[] | null {
-  if (!metadata) return null;
-  let json = "";
-  for (let index = 0; `${CART_KEY}_${index}` in metadata; index++) {
-    json += metadata[`${CART_KEY}_${index}`];
-  }
-  if (!json) return null;
-  try {
-    const parsed = snapshotSchema.safeParse(JSON.parse(json));
-    if (!parsed.success) return null;
-    return parsed.data.map(([slug, color, size, quantity, unitPriceCents]) => ({
-      slug,
-      color,
-      size,
-      quantity,
-      unitPriceCents,
-    }));
-  } catch {
-    return null;
-  }
 }

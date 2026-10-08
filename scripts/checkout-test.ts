@@ -12,19 +12,13 @@ config({ path: [".env.local", ".env"] });
 
 import assert from "node:assert/strict";
 import { eq } from "drizzle-orm";
-import type Stripe from "stripe";
 import { getDb } from "../src/db";
 import { recordPaidOrder } from "../src/db/queries/orders";
 import { customers, orderItems, orders, webhookEvents } from "../src/db/schema";
 import { getProducts } from "../src/lib/catalog";
-import {
-  cartLinesSchema,
-  decodeCart,
-  encodeCart,
-  priceCart,
-  shippingFor,
-} from "../src/lib/checkout/pricing";
-import { orderFromSession, paymentRefFor } from "../src/lib/payments/stripe-orders";
+import { cartLinesSchema, priceCart, shippingFor } from "../src/lib/checkout/pricing";
+import { ORDER_SOURCE, type SquareOrder, type SquarePayment } from "../src/lib/payments/square";
+import { orderFromSquare } from "../src/lib/payments/square-orders";
 import { siteConfig } from "../src/lib/site-config";
 
 let passed = 0;
@@ -34,7 +28,7 @@ function check(label: string, run: () => void) {
   console.log(`  ok  ${label}`);
 }
 
-const [tee, otherTee] = getProducts();
+const [tee] = getProducts();
 const line = (overrides: Partial<{ slug: string; color: string; size: string; quantity: number }> = {}) => ({
   slug: tee.slug,
   color: tee.colors[0].name,
@@ -103,107 +97,95 @@ check("shipping: an unknown product type uses the fallback rate", () => {
   assert.equal(shippingFor([]), 0);
 });
 
-check("the cart survives the trip through session metadata", () => {
-  const priced = priceCart([line({ quantity: 2 }), line({ slug: otherTee.slug, color: otherTee.colors[0].name, size: otherTee.sizes[1] })]);
-  assert.ok(priced.ok);
-  const metadata = encodeCart(priced.cart.lines);
-  for (const value of Object.values(metadata)) assert.ok(value.length <= 500);
-  const decoded = decodeCart(metadata);
-  assert.deepEqual(
-    decoded,
-    priced.cart.lines.map(({ slug, color, size, quantity, unitPriceCents }) => ({
-      slug,
-      color,
-      size,
-      quantity,
-      unitPriceCents,
-    })),
-  );
-});
+console.log("Reading a Square payment");
 
-check("the largest possible cart fits in metadata", () => {
-  const big = Array.from({ length: 20 }, (_, index) => ({
-    slug: `a-product-with-quite-a-long-name-number-${index}`,
-    color: "Heather Charcoal",
-    size: "2XL",
-    quantity: 10,
-    unitPriceCents: 12345,
-  }));
-  const metadata = encodeCart(big);
-  // Stripe allows 50 keys of up to 500 characters each.
-  assert.ok(Object.keys(metadata).length <= 50);
-  assert.deepEqual(decodeCart(metadata), big);
-});
-
-check("damaged or missing metadata is refused, not guessed at", () => {
-  assert.equal(decodeCart(null), null);
-  assert.equal(decodeCart({}), null);
-  assert.equal(decodeCart({ cart_0: "[[" }), null);
-  assert.equal(decodeCart({ cart_0: '[["a","b","c",-1,100]]' }), null);
-});
-
-console.log("Reading a checkout session");
-
-const metadata = encodeCart([
-  { slug: tee.slug, color: tee.colors[0].name, size: "M", quantity: 2, unitPriceCents: tee.priceCents },
-]);
-const session = {
-  id: "cs_test_checkouttest",
-  payment_intent: "pi_checkouttest",
-  payment_status: "paid",
-  currency: "usd",
-  amount_subtotal: tee.priceCents * 2,
-  amount_total: tee.priceCents * 2 + 524 + 300,
-  total_details: { amount_discount: 0, amount_shipping: 524, amount_tax: 300 },
-  customer_details: {
-    email: "Buyer@Example.com",
-    name: "Test Buyer",
-    phone: null,
-    address: null,
-  },
-  collected_information: {
-    shipping_details: {
-      name: "Test Buyer",
-      address: {
-        line1: "1 Test St",
-        line2: null,
-        city: "Austin",
-        state: "TX",
-        postal_code: "78701",
-        country: "US",
+const order: SquareOrder = {
+  id: "ORDERcheckouttest1",
+  location_id: "LOC1",
+  metadata: { source: ORDER_SOURCE },
+  line_items: [
+    {
+      name: tee.name,
+      quantity: "2",
+      base_price_money: { amount: tee.priceCents, currency: "USD" },
+      metadata: { slug: tee.slug, color: tee.colors[0].name, size: "M" },
+    },
+  ],
+  fulfillments: [
+    {
+      type: "SHIPMENT",
+      shipment_details: {
+        recipient: {
+          display_name: "Test Buyer",
+          email_address: "Buyer@Example.com",
+          phone_number: "+14075550100",
+          address: {
+            address_line_1: "1 Test St",
+            locality: "Orlando",
+            administrative_district_level_1: "FL",
+            postal_code: "32801",
+            country: "US",
+          },
+        },
       },
     },
-  },
-  metadata,
-} as unknown as Stripe.Checkout.Session;
-const event = { id: "evt_checkouttest_1", type: "checkout.session.completed" } as const;
+  ],
+  tenders: [{ id: "PAYcheckouttest1", payment_id: "PAYcheckouttest1" }],
+  total_money: { amount: tee.priceCents * 2 + 524, currency: "USD" },
+  total_tax_money: { amount: 0, currency: "USD" },
+  total_discount_money: { amount: 0, currency: "USD" },
+  total_service_charge_money: { amount: 524, currency: "USD" },
+};
+const payment: SquarePayment = {
+  id: "PAYcheckouttest1",
+  status: "COMPLETED",
+  order_id: order.id,
+  amount_money: order.total_money,
+  buyer_email_address: "Buyer@Example.com",
+};
+const event = { provider: "square", id: "evt_checkouttest_1", type: "payment.updated" };
 
-check("a paid session becomes an order", () => {
-  const order = orderFromSession(event, session);
-  assert.ok(order);
-  assert.equal(order.paymentRef, "pi_checkouttest");
-  assert.equal(order.totalCents, session.amount_total);
-  assert.equal(order.shippingCents, 524);
-  assert.equal(order.taxCents, 300);
-  assert.equal(order.items.length, 1);
-  assert.equal(order.items[0].productName, tee.name);
-  assert.equal(order.shippingAddress.postalCode, "78701");
+check("a completed payment becomes an order", () => {
+  const input = orderFromSquare(event, payment, order);
+  assert.ok(input);
+  assert.equal(input.paymentRef, "PAYcheckouttest1");
+  assert.equal(input.totalCents, tee.priceCents * 2 + 524);
+  assert.equal(input.subtotalCents, tee.priceCents * 2);
+  assert.equal(input.shippingCents, 524);
+  assert.equal(input.items.length, 1);
+  assert.equal(input.items[0].quantity, 2);
+  assert.equal(input.shippingName, "Test Buyer");
+  assert.equal(input.shippingAddress.postalCode, "32801");
 });
 
-check("a session without a cart, email or address is not an order", () => {
-  assert.equal(orderFromSession(event, { ...session, metadata: {} }), null);
+check("a payment taken elsewhere on the Square account is ignored", () => {
+  assert.equal(orderFromSquare(event, payment, { ...order, metadata: {} }), null);
+  assert.equal(orderFromSquare(event, payment, { ...order, metadata: { source: "pos" } }), null);
+});
+
+check("an unfinished, mismatched or part payment is not an order", () => {
+  assert.equal(orderFromSquare(event, { ...payment, status: "APPROVED" }, order), null);
+  assert.equal(orderFromSquare(event, { ...payment, order_id: "OTHER" }, order), null);
   assert.equal(
-    orderFromSession(event, { ...session, customer_details: null } as Stripe.Checkout.Session),
+    orderFromSquare(event, { ...payment, amount_money: { amount: 100, currency: "USD" } }, order),
+    null,
+  );
+});
+
+check("an order without an email, address or readable items is refused", () => {
+  assert.equal(
+    orderFromSquare(event, { ...payment, buyer_email_address: undefined }, { ...order, fulfillments: [] }),
+    null,
+  );
+  assert.equal(orderFromSquare(event, payment, { ...order, fulfillments: [] }), null);
+  assert.equal(
+    orderFromSquare(event, payment, { ...order, line_items: [{ ...order.line_items![0], metadata: {} }] }),
     null,
   );
   assert.equal(
-    orderFromSession(event, { ...session, collected_information: null } as Stripe.Checkout.Session),
+    orderFromSquare(event, payment, { ...order, line_items: [{ ...order.line_items![0], quantity: "1.5" }] }),
     null,
   );
-});
-
-check("a free order is referenced by its session", () => {
-  assert.equal(paymentRefFor({ ...session, payment_intent: null } as Stripe.Checkout.Session), session.id);
 });
 
 async function orderChecks() {
@@ -213,15 +195,15 @@ async function orderChecks() {
   }
   console.log("Saving orders");
   const db = getDb();
-  const input = orderFromSession(event, session);
+  const input = orderFromSquare(event, payment, order);
   assert.ok(input);
 
   const cleanup = async () => {
     await db.delete(orders).where(eq(orders.paymentRef, input.paymentRef));
     await db.delete(customers).where(eq(customers.email, "buyer@example.com"));
-    await db.delete(webhookEvents).where(eq(webhookEvents.provider, "stripe-test"));
+    await db.delete(webhookEvents).where(eq(webhookEvents.provider, "square-test"));
   };
-  const withEvent = (id: string) => ({ ...input, event: { ...input.event, provider: "stripe-test", id } });
+  const withEvent = (id: string) => ({ ...input, event: { ...input.event, provider: "square-test", id } });
   await cleanup();
 
   try {
@@ -240,11 +222,11 @@ async function orderChecks() {
 
     const results = await Promise.all(
       ["evt_c", "evt_d", "evt_e", "evt_f"].map((id) =>
-        recordPaidOrder(db, { ...withEvent(id), paymentRef: "pi_checkouttest_race" }),
+        recordPaidOrder(db, { ...withEvent(id), paymentRef: "PAYcheckouttest_race" }),
       ),
     );
     assert.equal(results.filter((result) => result.status === "created").length, 1);
-    await db.delete(orders).where(eq(orders.paymentRef, "pi_checkouttest_race"));
+    await db.delete(orders).where(eq(orders.paymentRef, "PAYcheckouttest_race"));
     console.log("  ok  four events arriving at once create one order");
     passed += 1;
 

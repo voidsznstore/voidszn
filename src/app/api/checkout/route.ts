@@ -1,10 +1,7 @@
-import type Stripe from "stripe";
-import { cartLinesSchema, encodeCart, priceCart } from "@/lib/checkout/pricing";
-import { getStripe, isStripeConfigured, isTaxActive } from "@/lib/payments/stripe";
+import { cartLinesSchema, priceCart } from "@/lib/checkout/pricing";
+import { ORDER_COOKIE } from "@/lib/checkout/return";
+import { createCheckout, getWebhookKey, isSquareConfigured } from "@/lib/payments/square";
 import { siteConfig } from "@/lib/site-config";
-
-/** Label that groups these sessions in the Stripe Dashboard. */
-const INTEGRATION_IDENTIFIER = "voidszn_embedded_checkout_qhzrmbtw";
 
 const MAX_BODY_BYTES = 16_000;
 
@@ -23,12 +20,12 @@ const fail = (error: string, status: number) => Response.json({ error }, { statu
 
 /**
  * Starts a checkout. Takes the cart (product, color, size, quantity only), prices
- * it from the catalog on the server, and returns the secret the embedded checkout
- * form needs. Nothing is recorded as an order here: that happens when the payment
- * processor confirms payment by webhook.
+ * it from the catalog on the server, and returns the address of Square's payment
+ * page for that exact order. Nothing is saved as an order here: that happens once
+ * Square confirms the payment.
  */
 export async function POST(request: Request) {
-  if (!isStripeConfigured()) return fail("Checkout is not available yet.", 503);
+  if (!isSquareConfigured()) return fail("Checkout is opening soon.", 503);
 
   const raw = await request.text();
   if (raw.length > MAX_BODY_BYTES) return fail("That cart is too large.", 413);
@@ -47,60 +44,39 @@ export async function POST(request: Request) {
   if (!priced.ok) return fail(priced.error, 409);
   const { cart } = priced;
 
-  const { shipping, orders, taxCodes } = siteConfig;
-  const origin = returnOrigin(request);
-
-  const params: Stripe.Checkout.SessionCreateParams = {
-    ui_mode: "embedded_page",
-    mode: "payment",
-    integration_identifier: INTEGRATION_IDENTIFIER,
-    return_url: `${origin}/order/confirmation?session_id={CHECKOUT_SESSION_ID}`,
-    line_items: cart.lines.map((line) => ({
-      quantity: line.quantity,
-      price_data: {
-        currency: "usd",
-        unit_amount: line.unitPriceCents,
-        tax_behavior: "exclusive",
-        product_data: {
-          name: line.product.name,
-          description: `${line.color} / ${line.size}`,
-          ...(line.typeSlug && taxCodes[line.typeSlug]
-            ? { tax_code: taxCodes[line.typeSlug] }
-            : {}),
-        },
-      },
-    })),
-    shipping_address_collection: { allowed_countries: [...shipping.countries] },
-    shipping_options: [
-      {
-        shipping_rate_data: {
-          type: "fixed_amount",
-          display_name: "Standard shipping",
-          fixed_amount: { amount: cart.shippingCents, currency: "usd" },
-          tax_behavior: "exclusive",
-          delivery_estimate: {
-            minimum: { unit: "business_day", value: shipping.deliveryEstimate.min },
-            maximum: { unit: "business_day", value: shipping.deliveryEstimate.max },
-          },
-        },
-      },
-    ],
-    automatic_tax: { enabled: await isTaxActive() },
-    allow_promotion_codes: true,
-    custom_text: {
-      submit: {
-        message: `Every item is printed to order, so sizes can't be exchanged. Damaged or wrong items are replaced or refunded within ${orders.issueWindowDays} days. [Returns policy](${siteConfig.url}/returns)`,
-      },
-    },
-    metadata: encodeCart(cart.lines),
-  };
+  // Make sure Square will tell us about the payment before anyone can pay. If this
+  // fails the order is still saved when the customer returns to the site.
+  try {
+    await getWebhookKey();
+  } catch (error) {
+    console.error("[checkout] Webhook is not set up", error);
+  }
 
   try {
-    const session = await getStripe().checkout.sessions.create(params);
-    if (!session.client_secret) throw new Error("Session has no client secret");
-    return Response.json({ clientSecret: session.client_secret });
+    const checkout = await createCheckout({
+      lines: cart.lines.map((line) => ({
+        name: line.product.name,
+        slug: line.slug,
+        color: line.color,
+        size: line.size,
+        quantity: line.quantity,
+        unitPriceCents: line.unitPriceCents,
+      })),
+      shippingCents: cart.shippingCents,
+      redirectUrl: `${returnOrigin(request)}/order/confirmation`,
+    });
+
+    return Response.json(
+      { url: checkout.url },
+      {
+        headers: {
+          // Remembers which order this browser went to pay, for the confirmation page.
+          "Set-Cookie": `${ORDER_COOKIE}=${checkout.orderId}; Path=/; Max-Age=86400; HttpOnly; Secure; SameSite=Lax`,
+        },
+      },
+    );
   } catch (error) {
-    console.error("[checkout] Could not create a checkout session", error);
+    console.error("[checkout] Could not create a payment page", error);
     return fail("Checkout could not be started. Please try again.", 502);
   }
 }

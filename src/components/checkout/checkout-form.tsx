@@ -1,18 +1,12 @@
 "use client";
 
-import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
-import { loadStripe } from "@stripe/stripe-js";
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useCart } from "@/lib/cart-store";
 
-const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-// Loaded once, and only on the checkout page.
-const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
-
-type Session =
+type Checkout =
   | { state: "loading" }
-  | { state: "ready"; signature: string; clientSecret: string }
+  | { state: "ready"; signature: string; url: string }
   | { state: "error"; signature: string; message: string };
 
 const noop = () => () => {};
@@ -26,20 +20,26 @@ function useHydrated(): boolean {
   );
 }
 
+const FALLBACK_ERROR = "Checkout could not be started. Please try again.";
+
+/**
+ * Sends the cart to the server, which prices it and opens a payment page for
+ * exactly that order, then takes the customer there.
+ */
 export function CheckoutForm() {
   const hydrated = useHydrated();
   const { items } = useCart();
-  const [session, setSession] = useState<Session>({ state: "loading" });
+  const [checkout, setCheckout] = useState<Checkout>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
 
-  // Changes whenever the cart does, so the payment form always matches the cart.
+  // Changes whenever the cart does, so the payment page always matches the cart.
   const signature = JSON.stringify(
     items.map((item) => [item.slug, item.color, item.size, item.quantity]),
   );
   const isEmpty = items.length === 0;
 
   useEffect(() => {
-    if (!hydrated || isEmpty || !stripePromise) return;
+    if (!hydrated || isEmpty) return;
 
     const controller = new AbortController();
     const lines = (JSON.parse(signature) as [string, string, string, number][]).map(
@@ -55,22 +55,18 @@ export function CheckoutForm() {
           signal: controller.signal,
         });
         const data = (await response.json().catch(() => null)) as {
-          clientSecret?: string;
+          url?: string;
           error?: string;
         } | null;
-        if (!response.ok || !data?.clientSecret) {
-          throw new Error(data?.error ?? "Checkout could not be started. Please try again.");
-        }
-        setSession({ state: "ready", signature, clientSecret: data.clientSecret });
+        if (!response.ok || !data?.url) throw new Error(data?.error ?? FALLBACK_ERROR);
+        setCheckout({ state: "ready", signature, url: data.url });
+        window.location.assign(data.url);
       } catch (error) {
         if (controller.signal.aborted) return;
-        setSession({
+        setCheckout({
           state: "error",
           signature,
-          message:
-            error instanceof Error && error.message
-              ? error.message
-              : "Checkout could not be started. Please try again.",
+          message: error instanceof Error && error.message ? error.message : FALLBACK_ERROR,
         });
       }
     })();
@@ -78,13 +74,7 @@ export function CheckoutForm() {
     return () => controller.abort();
   }, [hydrated, isEmpty, signature, attempt]);
 
-  if (!stripePromise) {
-    return <Notice>Checkout is opening soon.</Notice>;
-  }
-
-  if (!hydrated) {
-    return <Notice>Loading checkout…</Notice>;
-  }
+  if (!hydrated) return <Notice>Loading checkout…</Notice>;
 
   if (isEmpty) {
     return (
@@ -97,8 +87,9 @@ export function CheckoutForm() {
     );
   }
 
-  // A session made for an earlier version of the cart is never shown.
-  const current = session.state !== "loading" && session.signature === signature ? session : null;
+  // A payment page made for an earlier version of the cart is never shown.
+  const current =
+    checkout.state !== "loading" && checkout.signature === signature ? checkout : null;
 
   if (current?.state === "error") {
     return (
@@ -108,7 +99,7 @@ export function CheckoutForm() {
           type="button"
           className="btn btn-outline"
           onClick={() => {
-            setSession({ state: "loading" });
+            setCheckout({ state: "loading" });
             setAttempt((value) => value + 1);
           }}
         >
@@ -118,21 +109,16 @@ export function CheckoutForm() {
     );
   }
 
-  if (current?.state !== "ready") {
-    return <Notice>Loading checkout…</Notice>;
-  }
-
   return (
-    // The payment form is drawn by Stripe on a light background.
-    <div className="bg-white py-6">
-      <EmbeddedCheckoutProvider
-        key={current.clientSecret}
-        stripe={stripePromise}
-        options={{ clientSecret: current.clientSecret }}
-      >
-        <EmbeddedCheckout />
-      </EmbeddedCheckoutProvider>
-    </div>
+    <Notice>
+      <span>Taking you to secure checkout…</span>
+      {current?.state === "ready" ? (
+        // Shown if the browser didn't move on by itself, or the customer came back.
+        <a href={current.url} className="btn btn-accent">
+          Continue to payment
+        </a>
+      ) : null}
+    </Notice>
   );
 }
 

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { connection } from "next/server";
 import { getDb } from "@/db";
-import { isStripeConfigured } from "@/lib/payments/stripe";
+import { getSquareStatus } from "@/lib/payments/square";
 
 /**
  * Deploy check. Reports whether the site can reach its database, how many tables
@@ -12,16 +12,7 @@ export async function GET() {
   // Always answer from the live database, never from a prerendered copy.
   await connection();
 
-  const secretKey = process.env.STRIPE_SECRET_KEY ?? "";
-  const payments = {
-    payments: !isStripeConfigured()
-      ? "not configured"
-      : secretKey.includes("_live_")
-        ? "live"
-        : "test",
-    checkoutButton: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ? "on" : "off",
-    webhook: process.env.STRIPE_WEBHOOK_SECRET ? "configured" : "not configured",
-  };
+  const payments = await getSquareStatus();
 
   const configured = Boolean(process.env.DATABASE_URL ?? process.env.POSTGRES_URL);
   if (!configured) {
