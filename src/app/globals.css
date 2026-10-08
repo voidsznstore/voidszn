@@ -1,26 +1,102 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * VOIDSZN brand tokens. Change a value here and it changes everywhere.
+ * Use them as Tailwind classes: bg-void, text-bone, border-line, bg-accent, font-display.
+ */
+@theme {
+  --color-void: #0a0a0a; /* page background */
+  --color-ash: #1a1a1a; /* image wells, raised surfaces */
+  --color-ash-soft: #141414; /* panels */
+  --color-line: #2a2a2a; /* hairlines */
+  --color-line-strong: #5a5a5a; /* input and button outlines */
+  --color-smoke: #a3a3a3; /* secondary text */
+  --color-bone: #edeae3; /* primary text, light surfaces */
+  --color-bone-dim: #d0ccc4; /* body copy on dark */
+  --color-rust: #c4622d;
+
+  /* The one accent. Swap this line to re-skin the store. */
+  --color-accent: var(--color-rust);
+  /* Text that sits on the accent. Dark, because white on rust fails contrast. */
+  --color-on-accent: var(--color-void);
+
+  --font-display: "Anton", Impact, sans-serif;
+  --font-sans: "Archivo Variable", "Helvetica Neue", Helvetica, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", monospace;
+
+  --container-site: 80rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  html {
+    background: var(--color-void);
+    color-scheme: dark;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    background: var(--color-void);
+    color: var(--color-bone);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-bone);
+    outline-offset: 2px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* Small spaced label: SZN 01, prices, section tags */
+  .label {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 0.8125rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* Poster headline */
+  .display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    line-height: 0.98;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3.25rem;
+    padding: 0 2rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    transition: opacity 150ms ease;
+  }
+
+  .btn:hover {
+    opacity: 0.88;
+  }
+
+  .btn-accent {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+
+  .btn-light {
+    background: var(--color-bone);
+    color: var(--color-void);
+  }
+
+  .btn-outline {
+    border: 1px solid var(--color-bone);
+    color: var(--color-bone);
+  }
 }
