@@ -8,6 +8,9 @@ import { getProducts } from "@/lib/catalog";
 import { formatMoney } from "@/lib/money";
 import { useCartUi } from "./cart-provider";
 
+// Checkout only opens once the store has its payment keys.
+const checkoutIsOpen = Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+
 export function CartDrawer() {
   const { isOpen, closeCart } = useCartUi();
   const { items, count, subtotalCents } = useCart();
@@ -180,15 +183,28 @@ export function CartDrawer() {
               <p className="text-[0.8125rem] text-smoke">
                 Shipping and tax are calculated at checkout.
               </p>
-              {/* Enabled when checkout is built. */}
-              <button
-                type="button"
-                disabled
-                className="btn btn-accent min-h-[3.625rem] w-full text-[1.0625rem] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Checkout
-              </button>
-              <p className="text-center text-[0.8125rem] text-smoke">Checkout is opening soon.</p>
+              {checkoutIsOpen ? (
+                <Link
+                  href="/checkout"
+                  onClick={closeCart}
+                  className="btn btn-accent min-h-[3.625rem] w-full text-[1.0625rem]"
+                >
+                  Checkout
+                </Link>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled
+                    className="btn btn-accent min-h-[3.625rem] w-full text-[1.0625rem] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Checkout
+                  </button>
+                  <p className="text-center text-[0.8125rem] text-smoke">
+                    Checkout is opening soon.
+                  </p>
+                </>
+              )}
             </div>
           </>
         )}

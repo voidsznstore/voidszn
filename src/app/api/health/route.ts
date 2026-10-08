@@ -1,26 +1,39 @@
 import { sql } from "drizzle-orm";
 import { connection } from "next/server";
 import { getDb } from "@/db";
+import { isStripeConfigured } from "@/lib/payments/stripe";
 
 /**
- * Deploy check. Reports whether the site can reach its database and how many
- * tables exist. Returns no secrets and no error details.
+ * Deploy check. Reports whether the site can reach its database, how many tables
+ * exist, and which payment settings are in place. Returns no secrets and no error
+ * details.
  */
 export async function GET() {
   // Always answer from the live database, never from a prerendered copy.
   await connection();
 
+  const secretKey = process.env.STRIPE_SECRET_KEY ?? "";
+  const payments = {
+    payments: !isStripeConfigured()
+      ? "not configured"
+      : secretKey.includes("_live_")
+        ? "live"
+        : "test",
+    checkoutButton: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ? "on" : "off",
+    webhook: process.env.STRIPE_WEBHOOK_SECRET ? "configured" : "not configured",
+  };
+
   const configured = Boolean(process.env.DATABASE_URL ?? process.env.POSTGRES_URL);
   if (!configured) {
-    return Response.json({ database: "not configured" }, { status: 503 });
+    return Response.json({ database: "not configured", ...payments }, { status: 503 });
   }
 
   try {
     const result = await getDb().execute<{ count: number }>(
       sql`select count(*)::int as count from information_schema.tables where table_schema = 'public'`,
     );
-    return Response.json({ database: "ok", tables: result.rows[0]?.count ?? 0 });
+    return Response.json({ database: "ok", tables: result.rows[0]?.count ?? 0, ...payments });
   } catch {
-    return Response.json({ database: "unreachable" }, { status: 503 });
+    return Response.json({ database: "unreachable", ...payments }, { status: 503 });
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { MAX_QUANTITY } from "./cart-limits";
 import { type CatalogColor, type CatalogProduct, getProductBySlug } from "./catalog";
 
 /**
@@ -23,7 +24,7 @@ export type CartItem = CartLine & {
   lineTotalCents: number;
 };
 
-export const MAX_QUANTITY = 10;
+export { MAX_QUANTITY };
 
 const STORAGE_KEY = "voidszn-cart-v1";
 const EMPTY: CartLine[] = [];
@@ -120,6 +121,15 @@ export function removeFromCart(key: string) {
 
 export function clearCart() {
   commit(EMPTY);
+}
+
+/** The saved cart as it is right now. For code that runs outside a component render. */
+export function getCartLines(): CartLine[] {
+  if (!loaded) {
+    lines = read();
+    loaded = true;
+  }
+  return lines;
 }
 
 /** Joins the stored lines with the catalog and drops anything no longer sold. */

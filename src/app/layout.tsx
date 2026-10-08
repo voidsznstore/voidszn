@@ -4,12 +4,11 @@ import "@fontsource/anton/400.css";
 import "@fontsource-variable/archivo/wght.css";
 import "@fontsource-variable/jetbrains-mono/wght.css";
 import { CartProvider } from "@/components/cart/cart-provider";
+import { siteConfig } from "@/lib/site-config";
 import "./globals.css";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL(siteConfig.url),
   title: {
     default: "VOIDSZN",
     template: "%s | VOIDSZN",

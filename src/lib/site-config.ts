@@ -10,6 +10,8 @@
  */
 export const siteConfig = {
   name: "VOIDSZN",
+  /** Public address of the store. No trailing slash. */
+  url: "https://www.voidszn.com",
   /** Registered legal name of the business, e.g. "Voidszn LLC". */
   legalName: "[LEGAL BUSINESS NAME]",
   /** Physical mailing address. Required in marketing emails by CAN-SPAM. */
@@ -23,11 +25,40 @@ export const siteConfig = {
 
   shipping: {
     regions: "the United States",
+    /** ISO country codes checkout will ship to. */
+    countries: ["US"],
     /** Business days to print and pack before the order ships. */
     productionDays: "1 to 3",
     /** Business days in transit with standard shipping. */
     transitDays: "2 to 5",
+    /** Order placed to delivered, in business days: production plus transit. */
+    deliveryEstimate: { min: 3, max: 8 },
+    /**
+     * What the printer charges to ship, in cents, by product type. The first item
+     * in an order pays `first`; every other item pays `additional`. Customers are
+     * charged this amount, so shipping is passed through at cost.
+     */
+    rates: {
+      "t-shirts": { first: 449, additional: 75 },
+      crewnecks: { first: 599, additional: 125 },
+      hoodies: { first: 649, additional: 125 },
+      hats: { first: 499, additional: 75 },
+    } as Record<string, { first: number; additional: number }>,
+    /** Used for a product type that has no rate above. The highest rate, to be safe. */
+    fallbackRate: { first: 649, additional: 125 },
   },
+
+  /**
+   * Stripe product tax codes by product type, from https://docs.stripe.com/tax/tax-codes.
+   * Clothing is taxed differently from general goods in several states, so the
+   * code matters. Confirm these with a tax advisor before taking live payments.
+   */
+  taxCodes: {
+    "t-shirts": "txcd_30011000", // Clothing & Footwear
+    crewnecks: "txcd_30011000",
+    hoodies: "txcd_30011000",
+    hats: "txcd_30060006", // Hats
+  } as Record<string, string>,
 
   orders: {
     /** How long after ordering a customer can still cancel. */

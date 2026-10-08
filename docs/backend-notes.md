@@ -39,3 +39,19 @@ These are designed but not on the site yet, because they have nowhere to send da
 `src/lib/site-config.ts` holds the production time, shipping time, cancel window and
 issue window. Order emails and checkout must read from it too, so the site never
 promises one thing on a policy page and another in an email.
+
+## How checkout works
+
+- The browser sends only product, color, size and quantity to `/api/checkout`. Prices,
+  shipping and tax codes are worked out on the server (`src/lib/checkout/pricing.ts`).
+- Payment happens in Stripe's embedded checkout form. No card data touches this site.
+- An order is written in one place only: the webhook at `/api/webhooks/stripe`, when
+  Stripe confirms payment. The confirmation page never creates an order.
+- Each webhook event is stored once and each payment can create one order, so retries
+  and replays are harmless.
+- The paid cart rides on the checkout session as metadata, so the order can be written
+  from the webhook alone.
+- Shipping is charged at the printer's rate (`siteConfig.shipping.rates`).
+
+Still to do in admin: order list and detail (sortable by category), refunds (call
+Stripe, then mark the order), the "delayed" email action, and order emails.

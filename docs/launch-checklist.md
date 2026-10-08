@@ -66,3 +66,27 @@ advice. Have a lawyer read the policy pages before the store takes real orders.
 - [ ] Follow the processor's rules for the product category.
 - [ ] Refund and cancellation terms are visible before payment.
 - [ ] Statement descriptor shows a name customers will recognize.
+
+### Switching Stripe from sandbox to live
+
+The site runs on sandbox keys until every item here is done.
+
+- [ ] Stripe account fully activated (business details and bank account).
+- [ ] Stripe Tax: head office address saved, and a tax registration added in Stripe for
+      every state where the business is registered to collect. Checkout only charges
+      tax where a registration exists. With none, it charges no tax and shows no error.
+      Never add a registration in Stripe for a state the business has not actually
+      registered with.
+- [ ] Tax codes in `site-config.ts` confirmed against https://docs.stripe.com/tax/tax-codes
+      (clothing is taxed differently from general goods in several states).
+- [ ] Create a restricted key (`rk_live_...`) for the site instead of the full secret
+      key. It needs write access to Checkout Sessions and read access to Tax settings.
+- [ ] Create a live webhook endpoint for `https://www.voidszn.com/api/webhooks/stripe`
+      with the same three events as the sandbox one. It has its own signing secret.
+- [ ] Put the live key, live publishable key and live signing secret in Vercel
+      (Production only). Keep the sandbox ones on Preview.
+- [ ] Register `www.voidszn.com` as a payment method domain in Stripe so Apple Pay and
+      Google Pay show up.
+- [ ] Set brand colors and logo in Stripe's branding settings. The embedded checkout
+      form takes its look from there.
+- [ ] Place one real order and refund it.
