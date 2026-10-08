@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useCartUi } from "@/components/cart/cart-provider";
+import { addToCart } from "@/lib/cart-store";
 import type { CatalogProduct } from "@/lib/catalog";
 import Link from "next/link";
 import { formatMoney } from "@/lib/money";
@@ -24,6 +26,7 @@ export function ProductView({ product, typeName }: ProductViewProps) {
   const [size, setSize] = useState<string | null>(null);
   const [view, setView] = useState<View>("front");
   const [message, setMessage] = useState<string | null>(null);
+  const { openCart } = useCartUi();
 
   const color = product.colors[colorIndex];
 
@@ -32,8 +35,9 @@ export function ProductView({ product, typeName }: ProductViewProps) {
       setMessage("Pick a size first.");
       return;
     }
-    // The cart is built in the next step. Until then this only confirms the selection.
-    setMessage(`${color.name}, size ${size} selected. The cart is the next thing being built.`);
+    addToCart({ slug: product.slug, color: color.name, size });
+    setMessage(null);
+    openCart();
   }
 
   return (

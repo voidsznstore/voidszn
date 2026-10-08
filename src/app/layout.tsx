@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import "@fontsource/anton/400.css";
 import "@fontsource-variable/archivo/wght.css";
 import "@fontsource-variable/jetbrains-mono/wght.css";
+import { CartProvider } from "@/components/cart/cart-provider";
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -28,7 +29,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        <CartProvider>{children}</CartProvider>
+      </body>
     </html>
   );
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { EclipseLogo } from "@/components/brand/eclipse-logo";
+import { CartButton } from "@/components/cart/cart-button";
 import { headerLinks } from "@/lib/navigation";
 
 export function SiteHeader() {
@@ -34,8 +35,7 @@ export function SiteHeader() {
           </Link>
 
           <div className="flex justify-end text-sm font-semibold tracking-[0.04em]">
-            {/* Becomes the cart button when the cart is built. */}
-            <span className="inline-flex min-h-11 items-center text-smoke">Cart (0)</span>
+            <CartButton />
           </div>
         </div>
       </header>
