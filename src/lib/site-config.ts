@@ -14,9 +14,9 @@ export const siteConfig = {
   legalName: "[LEGAL BUSINESS NAME]",
   /** Physical mailing address. Required in marketing emails by CAN-SPAM. */
   mailingAddress: "[BUSINESS MAILING ADDRESS]",
-  supportEmail: "[SUPPORT EMAIL]",
+  supportEmail: "support@voidszn.com",
   /** Where infringement notices go. Can be the same inbox as support. */
-  legalEmail: "[LEGAL EMAIL]",
+  legalEmail: "legal@voidszn.com",
   /** State whose law governs the terms. */
   governingState: "[GOVERNING STATE]",
   policiesUpdated: "October 8, 2026",
