@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     default: "VOIDSZN",
     template: "%s | VOIDSZN",
   },
-  description: "Nothing is in season. Printed when you order, no logos on the clothes.",
+  description: "Nothing is in season. Graphic tees and more, printed when you order.",
   openGraph: {
     siteName: "VOIDSZN",
     type: "website",
