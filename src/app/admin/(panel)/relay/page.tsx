@@ -158,9 +158,9 @@ async function Relay() {
         </summary>
         <ol className="flex list-decimal flex-col gap-3 pl-5 pt-3 text-bone-dim">
           <li>
-            <strong className="text-bone">Make the relay shop.</strong> Any WordPress host with WooCommerce on it. It
-            needs its own address with HTTPS (a subdomain like relay.voidszn.com works). Put the shop in{" "}
-            <em>Coming soon</em> mode so nobody can buy from it directly.
+            <strong className="text-bone">Make the relay shop.</strong> Any WordPress host with WooCommerce on it, on
+            an address with HTTPS. On WordPress.com the free address is fine. Put the shop in <em>Coming soon</em>{" "}
+            mode so nobody can buy from it directly.
           </li>
           <li>
             <strong className="text-bone">Make its keys.</strong> In the shop: WooCommerce, Settings, Advanced, REST
@@ -168,7 +168,7 @@ async function Relay() {
           </li>
           <li>
             <strong className="text-bone">Put them in Vercel</strong> as <span className="font-mono">RELAY_WOO_URL</span>{" "}
-            (the shop&apos;s address), <span className="font-mono">RELAY_WOO_KEY</span> and{" "}
+            (the shop&apos;s address, starting with https://), <span className="font-mono">RELAY_WOO_KEY</span> and{" "}
             <span className="font-mono">RELAY_WOO_SECRET</span>, then redeploy. This page then says Connected.
           </li>
           <li>

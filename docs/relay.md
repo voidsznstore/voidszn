@@ -15,17 +15,13 @@ Customers never see the relay store. It is plumbing.
 Nothing is sent anywhere until the three settings below are in place. Until then
 orders are placed with the printer by hand, as before.
 
-## Check this first
+## Where it stands (October 9, 2026)
 
-Printmood's help centre has guides for connecting **Shopify, Etsy and Amazon**. Its
-home page shows a WooCommerce logo, but there was no WooCommerce guide when this was
-built (October 9, 2026). Before paying for anything, open Printmood, go to **Stores**,
-press the button to connect a new store, and see whether WooCommerce is offered.
-
-- If it is: carry on below.
-- If it isn't: don't set up WooCommerce. Tell the developer which options are listed.
-  The part of this code that speaks to the shop is one file (`src/lib/relay/woo.ts`),
-  and Shopify can take orders the same way.
+The relay shop is live at `voidsznrelay.wpcomstaging.com` (WordPress.com, Personal
+plan, billed monthly), the three settings are in Vercel, and Printmood is connected to
+it: Printmood does offer WooCommerce under Stores, although its help centre had no
+guide for it. Still to do: the test orders in step 7, then switching on "Send paid
+orders by themselves".
 
 ## What it does
 
@@ -51,17 +47,22 @@ press the button to connect a new store, and see whether WooCommerce is offered.
 
 ## Setting it up
 
-1. **Make the relay shop.** Any WordPress host with the WooCommerce plugin. It needs
-   its own address with HTTPS; a subdomain such as `relay.voidszn.com` works. In
-   WooCommerce, Settings, Site visibility, choose **Coming soon**, so nobody can buy
-   from it directly. In WordPress, Settings, Permalinks, pick anything but Plain.
+1. **Make the relay shop.** Any WordPress host with the WooCommerce plugin, on an
+   address with HTTPS. On WordPress.com: keep the free address (a subdomain of
+   voidszn.com can't be connected there while the main domain points at Vercel), take
+   any paid plan (plugins need one; Personal is enough), and install WooCommerce from
+   Plugins. Once plugins are installed the address ends in `.wpcomstaging.com`: use
+   the one in the browser's address bar. In WooCommerce, Settings, Site visibility,
+   choose **Coming soon**, so nobody can buy from it directly (the relay still works
+   with it on). In WordPress, Settings, Permalinks, pick anything but Plain.
 2. **Turn off the shop's customer emails** (WooCommerce, Settings, Emails). The site
    already puts the store's own email address on every order it sends, not the
    customer's, so the shop has nobody to write to. Switching them off stops the noise.
 3. **Make its keys.** WooCommerce, Settings, Advanced, REST API, Add key. Permissions:
    **Read/Write**. Copy the consumer key (`ck_...`) and consumer secret (`cs_...`).
 4. **Put three settings in Vercel**, then redeploy:
-   - `RELAY_WOO_URL`: the shop's address, like `https://relay.voidszn.com`
+   - `RELAY_WOO_URL`: the shop's address with `https://` in front and no slash at the
+     end, like `https://voidsznrelay.wpcomstaging.com`
    - `RELAY_WOO_KEY`: the consumer key
    - `RELAY_WOO_SECRET`: the consumer secret (mark it Sensitive)
 
@@ -151,7 +152,7 @@ Checked against a real WooCommerce 11.2 shop run on the build machine
 
 Not checked, because it needs a Printmood account connected to a real shop:
 
-1. That Printmood offers a WooCommerce connection at all (see "Check this first").
+1. (Settled: Printmood does connect to WooCommerce.)
 2. That Printmood leaves an unpaid ("pending") order alone and picks it up when it
    turns "processing". The one-copy design leans on this: a copy is made unpaid first
    so that a stray one can be binned unseen. If Printmood takes orders the moment they
