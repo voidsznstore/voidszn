@@ -64,6 +64,12 @@ sales), just in ordered by `products.created_at`.
   `PENDING`, "Not paid" tab) until "Mark as paid". Nothing is charged by the site, so
   there is no Refund box on these; money goes back the way it came. No sales tax is
   added. The form carries a token so sending it twice makes one order.
+- **Customers** (`/admin/customers`, `src/db/queries/admin-customers.ts`): everyone who
+  has ordered, plus anyone added by hand. Search, sort, tabs for new, returning and
+  those who get marketing emails. A customer's page has their details, notes, orders
+  and an "Add an order for them" button. Customers with orders can't be deleted.
+  `accepts_email` means they agreed to marketing emails; order emails ignore it.
+  Anyone in `email_optouts` unsubscribed themselves and is never sent marketing.
 - **Refunds:** the Refund box on an order sends the money back through Square, in full
   or in part, and counts it in `orders.refunded_cents`. A full refund closes the order.
   Each refund carries a key built from the order, what was already refunded, the

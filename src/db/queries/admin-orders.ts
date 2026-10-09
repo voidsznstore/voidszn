@@ -98,7 +98,10 @@ export async function listOrders(db: Database, filters: OrderFilters): Promise<A
   })();
 
   const flagged = sql<boolean>`${needsAttention(db)}`;
-  const units = sql<number>`(select coalesce(sum(${orderItems.quantity}), 0)::int from ${orderItems} where ${orderItems.orderId} = ${orders.id})`;
+  // Wrapped once more on purpose: in a one-table query the library drops table names
+  // from columns written straight into a selected field, and "id" would then mean
+  // the item's own id inside the sub-query.
+  const units = sql<number>`${sql`(select coalesce(sum(${orderItems.quantity}), 0)::int from ${orderItems} where ${orderItems.orderId} = ${orders.id})`}`;
 
   return db
     .select({

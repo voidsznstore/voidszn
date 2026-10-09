@@ -365,8 +365,11 @@ export const customers = pgTable("customers", {
   name: text("name"),
   phone: text("phone"),
   defaultAddress: jsonb("default_address").$type<Address>(),
+  /** Agreed to marketing emails. Order emails don't depend on this. */
   acceptsEmail: boolean("accepts_email").notNull().default(false),
   acceptsSms: boolean("accepts_sms").notNull().default(false),
+  /** The owner's own notes. Never shown to the customer. */
+  notes: text("notes"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -646,6 +649,62 @@ export const subscribers = pgTable("subscribers", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/**
+ * Addresses that asked to stop getting marketing emails. Checked on every
+ * campaign send, whatever the customer or subscriber record says.
+ */
+export const emailOptouts = pgTable("email_optouts", {
+  /** Always stored lowercase. */
+  email: text("email").primaryKey(),
+  /** "link" (the unsubscribe page), "one_click" (the mail app's own button) or "admin". */
+  source: text("source").notNull(),
+  createdAt: createdAt(),
+});
+
+export const campaignStatus = pgEnum("campaign_status", ["DRAFT", "SENDING", "SENT"]);
+
+/** A marketing email written in the admin and sent to everyone who agreed to get them. */
+export const campaigns = pgTable("campaigns", {
+  id: id(),
+  subject: text("subject").notNull(),
+  /** The line mail apps show after the subject. */
+  preheader: text("preheader"),
+  /** Plain text. A blank line starts a new paragraph. */
+  body: text("body").notNull(),
+  imageUrl: text("image_url"),
+  buttonLabel: text("button_label"),
+  buttonUrl: text("button_url"),
+  status: campaignStatus("status").notNull().default("DRAFT"),
+  createdBy: text("created_by").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+});
+
+/** One row per person a campaign goes to, so nobody can be sent the same campaign twice. */
+export const campaignSends = pgTable(
+  "campaign_sends",
+  {
+    id: id(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    name: text("name"),
+    /** In this person's unsubscribe link. Random, so it can't be guessed for someone else. */
+    token: text("token").notNull().unique(),
+    /** PENDING, SENT or FAILED. */
+    status: text("status").notNull().default("PENDING"),
+    error: text("error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("campaign_sends_campaign_email_uq").on(t.campaignId, t.email),
+    index("campaign_sends_status_idx").on(t.campaignId, t.status),
+  ],
+);
 
 export const abandonedCarts = pgTable(
   "abandoned_carts",

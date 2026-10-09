@@ -11,6 +11,17 @@ type Props = {
   paymentMethods: string[];
   /** Whether the store can send email. Without it there is no confirmation to offer. */
   canEmail: boolean;
+  /** Fills in the customer boxes, when the order is started from a customer's page. */
+  customer?: {
+    name: string;
+    email: string;
+    phone: string;
+    line1: string;
+    line2: string;
+    city: string;
+    state: string;
+    postalCode: string;
+  };
 };
 
 type Row = {
@@ -54,7 +65,7 @@ export function ManualOrderForm(props: Props) {
   return <OrderEditor key={bfcacheId} {...props} />;
 }
 
-function OrderEditor({ products, paymentMethods, canEmail }: Props) {
+function OrderEditor({ products, paymentMethods, canEmail, customer }: Props) {
   const router = useRouter();
   const id = useId();
   const [pending, startTransition] = useTransition();
@@ -62,15 +73,15 @@ function OrderEditor({ products, paymentMethods, canEmail }: Props) {
   // Made on the first save and kept, so saving the same form twice makes one order.
   const token = useRef<string | null>(null);
 
-  const [email, setEmail] = useState("");
-  const [customerName, setCustomerName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState(customer?.email ?? "");
+  const [customerName, setCustomerName] = useState(customer?.name ?? "");
+  const [phone, setPhone] = useState(customer?.phone ?? "");
   const [delivery, setDelivery] = useState<"ship" | "pickup">("ship");
-  const [line1, setLine1] = useState("");
-  const [line2, setLine2] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [postalCode, setPostalCode] = useState("");
+  const [line1, setLine1] = useState(customer?.line1 ?? "");
+  const [line2, setLine2] = useState(customer?.line2 ?? "");
+  const [city, setCity] = useState(customer?.city ?? "");
+  const [state, setState] = useState(customer?.state ?? "");
+  const [postalCode, setPostalCode] = useState(customer?.postalCode ?? "");
   const [rows, setRows] = useState<Row[]>(() => [blankRow()]);
   const [shipping, setShipping] = useState("");
   const [discount, setDiscount] = useState("");

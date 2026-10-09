@@ -43,6 +43,13 @@
       "when": 1791516219621,
       "tag": "0005_refunds_and_password_reset",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791522970011,
+      "tag": "0006_customers_and_campaigns",
+      "breakpoints": true
     }
   ]
 }

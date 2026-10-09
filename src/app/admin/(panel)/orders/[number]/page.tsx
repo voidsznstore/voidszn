@@ -405,6 +405,12 @@ async function Order({ params }: Pick<Props, "params">) {
               <a href={`mailto:${order.email}`} className="underline underline-offset-4">
                 {order.email}
               </a>
+              <Link
+                href={`/admin/customers/${order.customerId}`}
+                className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+              >
+                Their details and other orders
+              </Link>
             </div>
             {emailsOn ? (
               <OrderActionForm
