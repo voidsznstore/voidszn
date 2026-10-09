@@ -29,6 +29,16 @@ sales), just in ordered by `products.created_at`.
 - **Sign-in:** `/admin/login`. Sessions are random tokens in an httpOnly cookie, stored
   hashed in `admin_sessions`. Passwords are hashed with scrypt. Repeated bad sign-ins
   are slowed down (`admin_login_attempts`).
+- **Two-step sign-in is required.** After the password, sign-in asks for a six-digit code
+  from an authenticator app (Google Authenticator or any other; standard TOTP). A new
+  account is sent to set the app up before the admin opens at all. Ten one-time recovery
+  codes are shown at set-up, stored hashed, for when the phone is not to hand. The
+  Security screen (`/admin/security`) makes new recovery codes or moves to a new phone;
+  both need a current code. A code works once, and five wrong ones end the attempt.
+- **Locked out completely** (phone and recovery codes both gone): add a migration that
+  runs `UPDATE admin_users SET totp_secret = NULL, totp_pending_secret = NULL,
+  totp_enabled_at = NULL, totp_last_step = NULL WHERE email = '...'`. The next sign-in
+  with the password goes straight to set-up again.
 - **First account:** created through a one-time link (`/admin/setup?code=...`). Only the
   hash of the code is in the database. The link dies once an admin exists or after 14
   days. To issue a new one, add a migration like `drizzle/0002_admin_setup_link.sql`
@@ -44,8 +54,8 @@ sales), just in ordered by `products.created_at`.
   tracking email that opens in the owner's mail app.
 - **Cancelling an order does not refund it.** Refund in Square first.
 
-Not built yet: refunds from the admin, order emails, password reset, staff accounts,
-discount codes, the fulfilment connection to the printer.
+Not built yet: refunds from the admin, order emails, password reset and change, staff
+accounts, discount codes, the fulfilment connection to the printer.
 
 ## Forms that need the backend
 

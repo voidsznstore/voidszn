@@ -49,7 +49,7 @@ export default function PanelLayout({ children }: LayoutProps<"/admin">) {
 
 async function Identity() {
   const admin = await getAdmin();
-  if (!admin) return null;
+  if (!admin?.twoStep) return null;
   return (
     <>
       <span className="text-bone-dim">{admin.name}</span>

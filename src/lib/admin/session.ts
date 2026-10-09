@@ -17,7 +17,14 @@ import { ADMIN_COOKIE } from "./cookie";
 
 const SESSION_DAYS = 14;
 
-export type Admin = { id: string; email: string; name: string; role: "OWNER" | "STAFF" };
+export type Admin = {
+  id: string;
+  email: string;
+  name: string;
+  role: "OWNER" | "STAFF";
+  /** Whether an authenticator app has been set up. The admin is closed until it has. */
+  twoStep: boolean;
+};
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -67,6 +74,7 @@ export const getAdmin = cache(async (): Promise<Admin | null> => {
       email: adminUsers.email,
       name: adminUsers.name,
       role: adminUsers.role,
+      totpEnabledAt: adminUsers.totpEnabledAt,
     })
     .from(adminSessions)
     .innerJoin(adminUsers, eq(adminUsers.id, adminSessions.adminId))
@@ -75,15 +83,38 @@ export const getAdmin = cache(async (): Promise<Admin | null> => {
     )
     .limit(1);
 
-  return row ?? null;
+  if (!row) return null;
+  const { totpEnabledAt, ...admin } = row;
+  return { ...admin, twoStep: totpEnabledAt !== null };
 });
+
+/** The hash of this browser's session token, for "sign out everywhere else". */
+export async function currentSessionHash(): Promise<string | undefined> {
+  const token = (await cookies()).get(ADMIN_COOKIE)?.value;
+  return token ? hashToken(token) : undefined;
+}
+
+/** Where an admin who hasn't set up their authenticator app yet is sent. */
+export const ENROL_PATH = "/admin/security/authenticator";
+
+/**
+ * For the authenticator set-up screen only: signed in with a password, whether or
+ * not the app is set up yet. Everything else uses `requireAdmin`.
+ */
+export async function requireSignedIn(): Promise<Admin> {
+  const admin = await getAdmin();
+  if (!admin) redirect("/admin/login");
+  return admin;
+}
 
 /**
  * Use at the top of every admin page and every admin action. Sends anyone who
- * isn't signed in to the sign-in page.
+ * isn't signed in to the sign-in page, and anyone who hasn't set up their
+ * authenticator app to do that first.
  */
 export async function requireAdmin(): Promise<Admin> {
   const admin = await getAdmin();
   if (!admin) redirect("/admin/login");
+  if (!admin.twoStep) redirect(ENROL_PATH);
   return admin;
 }

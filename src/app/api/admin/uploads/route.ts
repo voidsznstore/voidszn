@@ -21,7 +21,9 @@ function sniff(bytes: Uint8Array): { type: string; extension: string } | null {
  * address the photo is served from.
  */
 export async function POST(request: Request) {
-  if (!(await getAdmin())) return Response.json({ error: "Sign in again." }, { status: 401 });
+  // Fully signed in: a session, and the authenticator app set up.
+  const admin = await getAdmin();
+  if (!admin?.twoStep) return Response.json({ error: "Sign in again." }, { status: 401 });
   if (!isStorageConfigured()) {
     return Response.json({ error: "Photo storage isn't set up." }, { status: 503 });
   }

@@ -126,9 +126,46 @@ export const adminUsers = pgTable("admin_users", {
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
   role: adminRole("role").notNull().default("STAFF"),
+  /** Authenticator app secret (base32). Set once the app has been confirmed with a code. */
+  totpSecret: text("totp_secret"),
+  /** A secret that has been shown as a QR code but not confirmed yet. */
+  totpPendingSecret: text("totp_pending_secret"),
+  totpEnabledAt: timestamp("totp_enabled_at", { withTimezone: true }),
+  /** The 30-second window of the last code accepted, so a code can't be used twice. */
+  totpLastStep: integer("totp_last_step"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/**
+ * Between a correct password and a correct authenticator code. The browser holds
+ * a random token in a short-lived cookie; only its hash is stored.
+ */
+export const adminLoginChallenges = pgTable("admin_login_challenges", {
+  id: id(),
+  adminId: uuid("admin_id")
+    .notNull()
+    .references(() => adminUsers.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: createdAt(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
+/** One-time codes for signing in when the phone with the authenticator app is gone. Stored hashed. */
+export const adminRecoveryCodes = pgTable(
+  "admin_recovery_codes",
+  {
+    id: id(),
+    adminId: uuid("admin_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("admin_recovery_codes_admin_idx").on(t.adminId)],
+);
 
 /** A signed-in admin. The cookie holds a random token; only its hash is stored. */
 export const adminSessions = pgTable(

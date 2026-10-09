@@ -8,7 +8,8 @@ import { ADMIN_COOKIE } from "@/lib/admin/cookie";
  */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isPublic = pathname === "/admin/login" || pathname === "/admin/setup";
+  const isPublic =
+    pathname === "/admin/login" || pathname === "/admin/login/verify" || pathname === "/admin/setup";
 
   if (!isPublic && !request.cookies.has(ADMIN_COOKIE)) {
     return NextResponse.redirect(new URL("/admin/login", request.url));

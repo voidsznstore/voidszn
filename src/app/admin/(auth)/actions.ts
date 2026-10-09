@@ -12,8 +12,18 @@ import {
   hashPassword,
   verifyPassword,
 } from "@/lib/admin/passwords";
-import { createSession, destroySession } from "@/lib/admin/session";
+import { createSession, destroySession, requireSignedIn } from "@/lib/admin/session";
 import { SETUP_SETTING, isSetupCodeValid } from "@/lib/admin/setup";
+import {
+  checkSecondStep,
+  confirmEnrolment,
+  endChallenge,
+  failChallenge,
+  readChallenge,
+  recordGuess,
+  startChallenge,
+  tooManyGuesses,
+} from "@/lib/admin/two-step";
 import {
   LOCKOUT_MESSAGE,
   attemptKeys,
@@ -48,7 +58,11 @@ export async function signIn(_previous: AuthFormState, form: FormData): Promise<
   if (await isLockedOut(keys)) return { error: LOCKOUT_MESSAGE, values: { email: typedEmail } };
 
   const [admin] = await getDb()
-    .select({ id: adminUsers.id, passwordHash: adminUsers.passwordHash })
+    .select({
+      id: adminUsers.id,
+      passwordHash: adminUsers.passwordHash,
+      totpEnabledAt: adminUsers.totpEnabledAt,
+    })
     .from(adminUsers)
     .where(eq(adminUsers.email, parsed.data.email))
     .limit(1);
@@ -63,8 +77,67 @@ export async function signIn(_previous: AuthFormState, form: FormData): Promise<
   }
 
   await clearFailures(keys);
+
+  // With an authenticator app set up, the password is only half of signing in.
+  if (admin.totpEnabledAt) {
+    await startChallenge(admin.id);
+    redirect("/admin/login/verify");
+  }
+  // Otherwise sign in, and the admin sends them to set the app up before anything else.
   await createSession(admin.id);
   redirect("/admin");
+}
+
+export type CodeFormState = { error?: string };
+
+/** Second step of signing in: a code from the authenticator app, or a recovery code. */
+export async function verifySecondStep(
+  _previous: CodeFormState,
+  form: FormData,
+): Promise<CodeFormState> {
+  const challenge = await readChallenge();
+  if (!challenge) {
+    await endChallenge();
+    redirect("/admin/login?expired=1");
+  }
+
+  const code = z.string().trim().min(6).max(20).safeParse(form.get("code"));
+  const result = code.success
+    ? await checkSecondStep(challenge.adminId, code.data)
+    : ({ ok: false } as const);
+
+  if (!result.ok) {
+    const left = await failChallenge(challenge);
+    if (left <= 0) {
+      await endChallenge(challenge);
+      redirect("/admin/login?expired=1");
+    }
+    return { error: `That code isn't right. ${left} ${left === 1 ? "try" : "tries"} left.` };
+  }
+
+  await endChallenge(challenge, { everyAttempt: true });
+  await createSession(challenge.adminId);
+  redirect(result.usedRecoveryCode ? "/admin/security?recovery=1" : "/admin");
+}
+
+export type EnrolFormState = { error?: string; recoveryCodes?: string[] };
+
+/** Finishes setting up the authenticator app, by proving it shows the right code. */
+export async function confirmAuthenticator(
+  _previous: EnrolFormState,
+  form: FormData,
+): Promise<EnrolFormState> {
+  const admin = await requireSignedIn();
+  if (admin.twoStep) redirect("/admin");
+  if (await tooManyGuesses(admin.id)) return { error: LOCKOUT_MESSAGE };
+
+  const code = z.string().trim().min(6).max(10).safeParse(form.get("code"));
+  const recoveryCodes = code.success ? await confirmEnrolment(admin.id, code.data) : null;
+  if (!recoveryCodes) {
+    await recordGuess(admin.id);
+    return { error: "That code isn't right. Check the app and enter the six digits it shows now." };
+  }
+  return { recoveryCodes };
 }
 
 export async function signOut(): Promise<void> {

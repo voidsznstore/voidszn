@@ -9,6 +9,7 @@ const links = [
   { href: "/admin/sales", label: "Sales" },
   { href: "/admin/products", label: "Products" },
   { href: "/admin/categories", label: "Categories" },
+  { href: "/admin/security", label: "Security" },
 ];
 
 /** The nav with the current section marked. Reads the address, so it sits behind a boundary. */
