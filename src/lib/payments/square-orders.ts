@@ -16,38 +16,50 @@ import {
 
 type EventRef = { provider: string; id: string; type: string };
 
+type Reading = { order: PaidOrderInput } | { problem: string };
+
 /**
- * Turns a completed Square payment and its order into the order to save. Returns
- * null when it is not one of this site's orders or something an order can't exist
- * without is missing.
+ * Turns a completed Square payment and its order into the order to save, or says
+ * what is missing. The reason never includes customer details, so it is safe to log.
  */
-export function orderFromSquare(
+export function readSquareOrder(
   event: EventRef,
   payment: SquarePayment,
   order: SquareOrder,
-): PaidOrderInput | null {
+): Reading {
   // The same Square account can take payments elsewhere (in person, invoices).
-  if (order.metadata?.source !== ORDER_SOURCE) return null;
-  if (payment.status !== "COMPLETED" || payment.order_id !== order.id) return null;
+  if (order.metadata?.source !== ORDER_SOURCE) return { problem: "not a site order" };
+  if (payment.status !== "COMPLETED") return { problem: `payment is ${payment.status}` };
+  if (payment.order_id !== order.id) return { problem: "payment is for another order" };
 
-  const recipient = order.fulfillments?.find((item) => item.shipment_details)?.shipment_details
-    ?.recipient;
+  const fulfillment = order.fulfillments?.find((item) => item.shipment_details);
+  const recipient = fulfillment?.shipment_details?.recipient;
   const address = recipient?.address ?? payment.shipping_address;
   const email = payment.buyer_email_address ?? recipient?.email_address;
   const total = order.total_money?.amount;
   const paid = payment.amount_money?.amount;
 
-  if (!email || !address?.address_line_1 || total === undefined || paid === undefined) return null;
+  if (!email) return { problem: "no buyer email on the payment or the order" };
+  if (!address?.address_line_1) {
+    const types = (order.fulfillments ?? []).map((item) => item.type ?? "?").join(",") || "none";
+    return { problem: `no shipping address (fulfillments: ${types})` };
+  }
+  if (total === undefined || paid === undefined) return { problem: "missing totals" };
   // Never treat a part payment as a paid order.
-  if (paid < total) return null;
+  if (paid < total) return { problem: `paid ${paid} of ${total}` };
 
   const items: PaidOrderInput["items"] = [];
   for (const line of order.line_items ?? []) {
     const quantity = Number(line.quantity);
     const unitPriceCents = line.base_price_money?.amount;
     const { slug, color, size } = line.metadata ?? {};
-    if (!slug || !color || !size || !Number.isInteger(quantity) || quantity < 1) return null;
-    if (unitPriceCents === undefined) return null;
+    if (!slug || !color || !size) {
+      const keys = Object.keys(line.metadata ?? {}).join(",") || "none";
+      return { problem: `line item is missing its product details (metadata: ${keys})` };
+    }
+    if (!Number.isInteger(quantity) || quantity < 1 || unitPriceCents === undefined) {
+      return { problem: "line item has no readable quantity or price" };
+    }
     items.push({
       slug,
       productName: line.name ?? slug,
@@ -57,7 +69,7 @@ export function orderFromSquare(
       unitPriceCents,
     });
   }
-  if (items.length === 0) return null;
+  if (items.length === 0) return { problem: "order has no line items" };
 
   const name =
     recipient?.display_name?.trim() ||
@@ -65,30 +77,41 @@ export function orderFromSquare(
     null;
 
   return {
-    event,
-    paymentRef: payment.id,
-    paymentProvider: "square",
-    email,
-    customerName: name,
-    phone: recipient?.phone_number ?? null,
-    currency: (order.total_money?.currency ?? "USD").toLowerCase(),
-    subtotalCents: items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0),
-    discountCents: order.total_discount_money?.amount ?? 0,
-    shippingCents: order.total_service_charge_money?.amount ?? 0,
-    taxCents: order.total_tax_money?.amount ?? 0,
-    totalCents: total,
-    shippingName: name ?? email,
-    shippingAddress: {
-      line1: address.address_line_1,
-      ...(address.address_line_2 ? { line2: address.address_line_2 } : {}),
-      city: address.locality ?? "",
-      state: address.administrative_district_level_1 ?? "",
-      postalCode: address.postal_code ?? "",
-      country: address.country ?? "",
+    order: {
+      event,
+      paymentRef: payment.id,
+      paymentProvider: "square",
+      email,
+      customerName: name,
+      phone: recipient?.phone_number ?? null,
+      currency: (order.total_money?.currency ?? "USD").toLowerCase(),
+      subtotalCents: items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0),
+      discountCents: order.total_discount_money?.amount ?? 0,
+      shippingCents: order.total_service_charge_money?.amount ?? 0,
+      taxCents: order.total_tax_money?.amount ?? 0,
+      totalCents: total,
+      shippingName: name ?? email,
+      shippingAddress: {
+        line1: address.address_line_1,
+        ...(address.address_line_2 ? { line2: address.address_line_2 } : {}),
+        city: address.locality ?? "",
+        state: address.administrative_district_level_1 ?? "",
+        postalCode: address.postal_code ?? "",
+        country: address.country ?? "",
+      },
+      shippingMethod: "Standard shipping",
+      items,
     },
-    shippingMethod: "Standard shipping",
-    items,
   };
+}
+
+export function orderFromSquare(
+  event: EventRef,
+  payment: SquarePayment,
+  order: SquareOrder,
+): PaidOrderInput | null {
+  const reading = readSquareOrder(event, payment, order);
+  return "order" in reading ? reading.order : null;
 }
 
 export type Settled =
@@ -110,16 +133,19 @@ export async function settlePayment(paymentId: string, event: EventRef): Promise
   if (!payment.order_id) return { status: "not_ours" };
 
   const order = await getOrder(payment.order_id);
-  const input = order ? orderFromSquare(event, payment, order) : null;
+  const reading = order ? readSquareOrder(event, payment, order) : { problem: "order not found" };
   const db = getDb();
 
-  if (!input) {
+  if (!("order" in reading)) {
     if (order?.metadata?.source === ORDER_SOURCE) {
-      console.error(`[square] Paid order ${order.id} could not be read. Payment ${payment.id}.`);
+      console.error(
+        `[square] Paid order ${order.id} could not be saved: ${reading.problem}. Payment ${payment.id}.`,
+      );
     }
     await recordEvent(db, event);
     return { status: "not_ours" };
   }
+  const input = reading.order;
 
   const result = await recordPaidOrder(db, input);
   const orderNumber =
