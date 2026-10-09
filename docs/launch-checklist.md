@@ -87,4 +87,7 @@ The site runs on the Sandbox access token until every item here is done.
       order. Never charge tax for a state the business is not registered in.
 - [ ] Set the business name, logo and colors in Square (Account & Settings), which is
       what the payment page and receipts show.
-- [ ] Place one real order and refund it.
+- [ ] Email: `RESEND_API_KEY` set in Vercel and voidszn.com verified in Resend.
+      `/api/health` shows `"email":"ok"` when both are done. Until then no order,
+      shipping or refund emails go out and "Forgot your password?" does not work.
+- [ ] Place one real order and refund it from the admin. Check the three emails arrive.

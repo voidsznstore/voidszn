@@ -1,7 +1,16 @@
 "use server";
 
+import { and, eq, ne } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getDb } from "@/db";
+import { adminSessions, adminUsers } from "@/db/schema";
+import {
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  hashPassword,
+  verifyPassword,
+} from "@/lib/admin/passwords";
 import { ENROL_PATH, currentSessionHash, requireAdmin } from "@/lib/admin/session";
 import { LOCKOUT_MESSAGE } from "@/lib/admin/throttle";
 import {
@@ -47,4 +56,58 @@ export async function replaceAuthenticatorAction(
   // This browser stays signed in to set the new app up. Every other one is signed out.
   await resetEnrolment(admin.id, await currentSessionHash());
   redirect(ENROL_PATH);
+}
+
+export type PasswordFormState = { error?: string; done?: boolean };
+
+/** Changes the password from inside the admin. Needs the current one. */
+export async function changePasswordAction(
+  _previous: PasswordFormState,
+  form: FormData,
+): Promise<PasswordFormState> {
+  const admin = await requireAdmin();
+  if (await tooManyGuesses(admin.id)) return { error: LOCKOUT_MESSAGE };
+
+  const parsed = z
+    .object({
+      current: z.string().min(1).max(MAX_PASSWORD_LENGTH),
+      password: z
+        .string()
+        .min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters.`)
+        .max(MAX_PASSWORD_LENGTH),
+      confirm: z.string(),
+    })
+    .safeParse({
+      current: form.get("current"),
+      password: form.get("password"),
+      confirm: form.get("confirm"),
+    });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  if (parsed.data.password !== parsed.data.confirm) {
+    return { error: "The two new passwords don't match." };
+  }
+
+  const db = getDb();
+  const [row] = await db
+    .select({ passwordHash: adminUsers.passwordHash })
+    .from(adminUsers)
+    .where(eq(adminUsers.id, admin.id))
+    .limit(1);
+  if (!row || !(await verifyPassword(parsed.data.current, row.passwordHash))) {
+    await recordGuess(admin.id);
+    return { error: "Your current password isn't right." };
+  }
+
+  await db
+    .update(adminUsers)
+    .set({ passwordHash: await hashPassword(parsed.data.password) })
+    .where(eq(adminUsers.id, admin.id));
+  // Every other browser is signed out. This one stays in.
+  const keep = await currentSessionHash();
+  await db
+    .delete(adminSessions)
+    .where(
+      and(eq(adminSessions.adminId, admin.id), keep ? ne(adminSessions.tokenHash, keep) : undefined),
+    );
+  return { done: true };
 }

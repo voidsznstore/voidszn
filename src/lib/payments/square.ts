@@ -24,7 +24,7 @@ const HOSTS: Record<SquareEnvironment, string> = {
 
 /** Where Square sends payment events. Must match the registered webhook exactly. */
 export const WEBHOOK_URL = `${siteConfig.url}/api/webhooks/square`;
-const WEBHOOK_EVENTS = ["payment.created", "payment.updated"];
+const WEBHOOK_EVENTS = ["payment.created", "payment.updated", "refund.updated"];
 
 export function isSquareConfigured(): boolean {
   return Boolean(process.env.SQUARE_ACCESS_TOKEN);
@@ -308,6 +308,45 @@ export async function getOrder(orderId: string): Promise<SquareOrder | null> {
 }
 
 /* ------------------------------------------------------------------ */
+/* Refunds                                                             */
+/* ------------------------------------------------------------------ */
+
+export type SquareRefund = { id: string; status?: string; payment_id?: string; amount_money?: Money };
+
+/**
+ * Sends money back for a payment. `idempotencyKey` identifies this one refund: if
+ * the same request is sent twice, Square refunds once and answers the same way.
+ */
+export async function refundPayment(input: {
+  paymentId: string;
+  amountCents: number;
+  reason: string;
+  idempotencyKey: string;
+}): Promise<SquareRefund> {
+  const account = await getAccount();
+  const { refund } = await call<{ refund?: SquareRefund }>(account.environment, "/v2/refunds", {
+    method: "POST",
+    body: {
+      idempotency_key: input.idempotencyKey,
+      payment_id: input.paymentId,
+      amount_money: { amount: input.amountCents, currency: account.currency },
+      ...(input.reason ? { reason: input.reason.slice(0, 192) } : {}),
+    },
+  });
+  if (!refund) throw new Error("Square did not return a refund.");
+  return refund;
+}
+
+export async function getRefund(refundId: string): Promise<SquareRefund | null> {
+  const account = await getAccount();
+  const { refund } = await call<{ refund?: SquareRefund }>(
+    account.environment,
+    `/v2/refunds/${encodeURIComponent(refundId)}`,
+  );
+  return refund ?? null;
+}
+
+/* ------------------------------------------------------------------ */
 /* Webhook                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -396,13 +435,20 @@ export async function getWebhookKey(options: { refresh?: boolean } = {}): Promis
     const { environment } = await getAccount();
     const db = getDb();
     const saved = options.refresh ? null : await getSetting(db, settingKey(environment));
-    let key = saved ? (JSON.parse(saved) as { key?: string }).key : undefined;
+    const known = saved ? (JSON.parse(saved) as { key?: string; events?: string[] }) : null;
+    // Register again when the store starts listening for a kind of event it didn't before.
+    const upToDate = WEBHOOK_EVENTS.every((type) => known?.events?.includes(type));
+    let key = upToDate ? known?.key : undefined;
 
     if (!key) {
       const subscription = await registerWebhook(environment);
       key = subscription.signature_key;
       if (!key) throw new Error("Square did not return a webhook signature key.");
-      await setSetting(db, settingKey(environment), JSON.stringify({ id: subscription.id, key }));
+      await setSetting(
+        db,
+        settingKey(environment),
+        JSON.stringify({ id: subscription.id, key, events: WEBHOOK_EVENTS }),
+      );
     }
 
     globalForSquare.voidsznSquareWebhook = { value: key, at: Date.now() };

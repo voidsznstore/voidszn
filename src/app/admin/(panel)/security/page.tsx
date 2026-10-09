@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Loading, PageHeader } from "@/components/admin/page-header";
+import { ChangePasswordForm } from "@/components/admin/auth-forms";
 import { SecurityCodeForm } from "@/components/admin/two-step-forms";
+import { MIN_PASSWORD_LENGTH } from "@/lib/admin/passwords";
 import { requireAdmin } from "@/lib/admin/session";
 import { countRecoveryCodes } from "@/lib/admin/two-step";
 
@@ -41,6 +43,18 @@ async function Security({ searchParams }: Pick<Props, "searchParams">) {
           On. Signing in as {admin.email} needs your password and a code from your authenticator
           app.
         </p>
+      </section>
+
+      <section className={panel}>
+        <h2 className="text-lg font-semibold text-white">Password</h2>
+        <details>
+          <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm underline underline-offset-4">
+            Change your password
+          </summary>
+          <div className="pt-2">
+            <ChangePasswordForm minLength={MIN_PASSWORD_LENGTH} />
+          </div>
+        </details>
       </section>
 
       <section className={panel}>

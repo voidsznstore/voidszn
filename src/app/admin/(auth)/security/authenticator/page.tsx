@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { signOut } from "@/app/admin/(auth)/actions";
+import { SignOutButton } from "@/components/admin/sign-out-button";
 import { EnrolForm } from "@/components/admin/two-step-forms";
 import { requireSignedIn } from "@/lib/admin/session";
 import { beginEnrolment } from "@/lib/admin/two-step";
@@ -60,11 +60,7 @@ async function Enrol() {
 
       <EnrolForm />
 
-      <form action={signOut} className="self-center">
-        <button type="submit" className="inline-flex min-h-11 items-center text-sm text-smoke underline underline-offset-4 hover:text-bone">
-          Sign out
-        </button>
-      </form>
+      <SignOutButton className="self-center" />
     </>
   );
 }

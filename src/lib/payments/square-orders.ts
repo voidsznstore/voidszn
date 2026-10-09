@@ -1,6 +1,7 @@
 import "server-only";
 import { getDb } from "@/db";
 import { findSellables } from "@/db/queries/catalog";
+import { sendOrderPlaced } from "@/lib/email/order-emails";
 import {
   type PaidOrderInput,
   findOrderNumberByPaymentRef,
@@ -180,5 +181,8 @@ export async function settlePayment(paymentId: string, event: EventRef): Promise
     result.status === "created"
       ? result.orderNumber
       : await findOrderNumberByPaymentRef(db, input.paymentRef);
+  // Only the call that actually created the order sends the confirmation, so the
+  // customer gets exactly one.
+  if (result.status === "created") await sendOrderPlaced(result.orderNumber);
   return { status: "saved", orderNumber, order: input, receiptUrl: payment.receipt_url ?? null };
 }

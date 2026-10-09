@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, exists, gte, ilike, inArray, notExists, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gte, ilike, inArray, or, sql } from "drizzle-orm";
 import type { Database } from "../index";
 import {
   type Address,
@@ -12,22 +12,25 @@ import {
 const ATTENTION = "order.attention";
 const ATTENTION_RESOLVED = "order.attention_resolved";
 
-/** True for orders flagged for a person to look at and not yet marked as dealt with. */
-const needsAttention = (db: Database) =>
-  and(
-    exists(
-      db
-        .select({ one: sql`1` })
-        .from(orderEvents)
-        .where(and(eq(orderEvents.orderId, orders.id), eq(orderEvents.type, ATTENTION))),
-    ),
-    notExists(
-      db
-        .select({ one: sql`1` })
-        .from(orderEvents)
-        .where(and(eq(orderEvents.orderId, orders.id), eq(orderEvents.type, ATTENTION_RESOLVED))),
-    ),
+/**
+ * True for orders flagged for a person to look at and not yet marked as dealt
+ * with. A flag raised after the last "dealt with" counts as open again.
+ */
+const needsAttention = (db: Database) => {
+  const lastResolved = sql`(select max(resolved.created_at) from ${orderEvents} resolved where resolved.order_id = ${orders.id} and resolved.type = ${ATTENTION_RESOLVED})`;
+  return exists(
+    db
+      .select({ one: sql`1` })
+      .from(orderEvents)
+      .where(
+        and(
+          eq(orderEvents.orderId, orders.id),
+          eq(orderEvents.type, ATTENTION),
+          sql`(${lastResolved} is null or ${orderEvents.createdAt} > ${lastResolved})`,
+        ),
+      ),
   );
+};
 
 /* ------------------------------------------------------------------ */
 /* List                                                                */
@@ -192,9 +195,14 @@ export async function getOrderDetail(db: Database, orderNumber: string) {
       .orderBy(desc(orderEvents.createdAt)),
   ]);
 
-  const flags = events.filter((event) => event.type === ATTENTION);
-  const resolved = events.some((event) => event.type === ATTENTION_RESOLVED);
-  return { order, items, events, attention: resolved ? [] : flags.map((flag) => flag.message ?? "") };
+  // Flags raised since the last time the order was marked as dealt with.
+  const lastResolved = events.find((event) => event.type === ATTENTION_RESOLVED)?.createdAt;
+  const attention = events
+    .filter(
+      (event) => event.type === ATTENTION && (!lastResolved || event.createdAt > lastResolved),
+    )
+    .map((flag) => flag.message ?? "");
+  return { order, items, events, attention };
 }
 
 export type OrderDetail = NonNullable<Awaited<ReturnType<typeof getOrderDetail>>>;
@@ -299,6 +307,146 @@ export const updateShippingAddress = (
     set: { shippingName: shipping.name, shippingAddress: shipping.address },
     event: { type: "order.address_updated", message: "Shipping address updated" },
   });
+
+/**
+ * Writes a refund that Square has accepted onto the order. `refundedBefore` is what
+ * the page showed as already refunded: if that has changed, someone else refunded
+ * in the meantime and nothing is written.
+ */
+export async function recordRefund(
+  db: Database,
+  orderNumber: string,
+  actor: string,
+  refund: { amountCents: number; refundedBefore: number; reason: string; refundId: string },
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [order] = await tx
+      .select({
+        id: orders.id,
+        status: orders.status,
+        totalCents: orders.totalCents,
+        refundedCents: orders.refundedCents,
+      })
+      .from(orders)
+      .where(eq(orders.orderNumber, orderNumber))
+      .limit(1)
+      .for("update");
+    if (!order) throw new OrderError("That order no longer exists.");
+
+    // The same refund recorded twice (a retry) changes nothing the second time.
+    const [already] = await tx
+      .select({ id: orderEvents.id })
+      .from(orderEvents)
+      .where(
+        and(
+          eq(orderEvents.orderId, order.id),
+          eq(orderEvents.type, "order.refunded"),
+          sql`${orderEvents.data}->>'refundId' = ${refund.refundId}`,
+        ),
+      )
+      .limit(1);
+    if (already) return;
+
+    if (order.refundedCents !== refund.refundedBefore) {
+      throw new OrderError("This order has changed since the page loaded. Refresh and try again.");
+    }
+    const refundedCents = order.refundedCents + refund.amountCents;
+    const isFull = refundedCents >= order.totalCents;
+    const notShipped = order.status === "PAID" || order.status === "IN_PRODUCTION";
+
+    await tx
+      .update(orders)
+      .set({
+        refundedCents,
+        paymentStatus: isFull ? "REFUNDED" : "PARTIALLY_REFUNDED",
+        // A full refund closes the order. One that hasn't shipped is taken out of fulfilment too.
+        ...(isFull ? { status: "REFUNDED" as const } : {}),
+        ...(isFull && notShipped ? { fulfillmentStatus: "CANCELLED" as const } : {}),
+      })
+      .where(eq(orders.id, order.id));
+    await tx.insert(orderEvents).values({
+      orderId: order.id,
+      actor,
+      type: "order.refunded",
+      message: `Refunded $${(refund.amountCents / 100).toFixed(2)}${isFull ? " (in full)" : ""}${
+        refund.reason ? `: ${refund.reason}` : ""
+      }`,
+      data: { refundId: refund.refundId, amountCents: refund.amountCents },
+    });
+  });
+}
+
+/** Kinds of history entry that each mark one finished refund attempt, successful or not. */
+export const REFUND_ATTEMPTS = ["order.refunded", "order.refund_failed"];
+
+/** Writes down a refund Square turned away, so the order's history shows it was tried. */
+export const recordRefundRefusal = (
+  db: Database,
+  orderNumber: string,
+  actor: string,
+  refusal: { amountCents: number; why: string },
+) =>
+  change(db, orderNumber, actor, {
+    set: {},
+    event: {
+      type: "order.refund_failed",
+      message: `A refund of $${(refusal.amountCents / 100).toFixed(2)} was not made: ${refusal.why}`,
+    },
+  });
+
+/**
+ * Square reported that a refund it had accepted did not go through. The amount
+ * is taken back off what the order counts as refunded, so the refund can be
+ * tried again, and the order is flagged for a person to look at.
+ */
+export async function flagFailedRefund(
+  db: Database,
+  paymentRef: string,
+  refund: { id: string; status: string; amountCents: number },
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [order] = await tx
+      .select({ id: orders.id, refundedCents: orders.refundedCents })
+      .from(orders)
+      .where(eq(orders.paymentRef, paymentRef))
+      .limit(1)
+      .for("update");
+    if (!order) return false;
+
+    const about = (type: string) =>
+      and(
+        eq(orderEvents.orderId, order.id),
+        eq(orderEvents.type, type),
+        sql`${orderEvents.data}->>'refundId' = ${refund.id}`,
+      );
+    // Square can report the same failure more than once.
+    const [flagged] = await tx.select({ id: orderEvents.id }).from(orderEvents).where(about(ATTENTION)).limit(1);
+    if (flagged) return true;
+
+    // Only a refund that was counted on this order is taken back off it.
+    const [counted] = await tx
+      .select({ data: orderEvents.data })
+      .from(orderEvents)
+      .where(about("order.refunded"))
+      .limit(1);
+    const amount = Number((counted?.data as { amountCents?: number } | null)?.amountCents ?? 0);
+    if (counted && amount > 0) {
+      const refundedCents = Math.max(0, order.refundedCents - amount);
+      await tx
+        .update(orders)
+        .set({ refundedCents, paymentStatus: refundedCents > 0 ? "PARTIALLY_REFUNDED" : "PAID" })
+        .where(eq(orders.id, order.id));
+    }
+
+    await tx.insert(orderEvents).values({
+      orderId: order.id,
+      type: ATTENTION,
+      message: `Square could not complete a refund of $${(refund.amountCents / 100).toFixed(2)} (${refund.status.toLowerCase()}). The customer has not been paid back. Try the refund again, or check the payment in Square.`,
+      data: { refundId: refund.id },
+    });
+    return true;
+  });
+}
 
 export const resolveAttention = (db: Database, orderNumber: string, actor: string) =>
   change(db, orderNumber, actor, {

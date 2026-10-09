@@ -9,6 +9,7 @@ import { getDb } from "@/db";
 import { type OrderDetail, getOrderDetail } from "@/db/queries/admin-orders";
 import { formatDateTime, statusLabel } from "@/lib/admin/format";
 import { requireAdmin } from "@/lib/admin/session";
+import { isEmailConfigured } from "@/lib/email/send";
 import { formatMoney } from "@/lib/money";
 import { siteConfig } from "@/lib/site-config";
 import {
@@ -17,6 +18,8 @@ import {
   deliveredAction,
   inProductionAction,
   noteAction,
+  refundAction,
+  resendConfirmationAction,
   resolveAction,
   shippedAction,
 } from "../actions";
@@ -43,20 +46,23 @@ function Field({
   defaultValue,
   placeholder,
   required,
+  id = `field-${name}`,
 }: {
   label: string;
   name: string;
+  /** Only needed when two forms on the page have a field with the same name. */
+  id?: string;
   defaultValue?: string | null;
   placeholder?: string;
   required?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={`field-${name}`} className="text-sm font-semibold">
+      <label htmlFor={id} className="text-sm font-semibold">
         {label}
       </label>
       <input
-        id={`field-${name}`}
+        id={id}
         name={name}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
@@ -101,6 +107,9 @@ async function Order({ params }: Pick<Props, "params">) {
   const hasAddress = Boolean(address.line1);
   const open = order.status === "PAID" || order.status === "IN_PRODUCTION";
   const shipped = order.status === "SHIPPED" || order.status === "DELIVERED";
+  const emailsOn = isEmailConfigured();
+  const refundable = order.totalCents - order.refundedCents;
+  const canRefund = order.paymentProvider === "square" && Boolean(order.paymentRef) && refundable > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -180,6 +189,12 @@ async function Order({ params }: Pick<Props, "params">) {
                 <dt>Total paid</dt>
                 <dd className="font-mono">{formatMoney(order.totalCents)}</dd>
               </div>
+              {order.refundedCents > 0 ? (
+                <div className="flex justify-between text-accent">
+                  <dt>Refunded</dt>
+                  <dd className="font-mono">-{formatMoney(order.refundedCents)}</dd>
+                </div>
+              ) : null}
             </dl>
           </section>
 
@@ -228,15 +243,20 @@ async function Order({ params }: Pick<Props, "params">) {
                   </p>
                 ) : null}
                 {order.deliveredAt ? <p>Delivered {formatDateTime(order.deliveredAt)}.</p> : null}
-                <p className="pt-2">
-                  <a href={trackingEmail(detail)} className="btn btn-outline min-h-11 px-5">
-                    Email tracking to the customer
-                  </a>
-                </p>
-                <p className={small}>
-                  The store doesn&apos;t send shipping emails by itself yet. This opens an email
-                  in your mail app, already written, for you to send.
-                </p>
+                {emailsOn ? null : (
+                  <>
+                    <p className="pt-2">
+                      <a href={trackingEmail(detail)} className="btn btn-outline min-h-11 px-5">
+                        Email tracking to the customer
+                      </a>
+                    </p>
+                    <p className={small}>
+                      Email sending isn&apos;t set up yet, so the store can&apos;t send this by
+                      itself. This opens an email in your mail app, already written, for you to
+                      send.
+                    </p>
+                  </>
+                )}
               </div>
             ) : null}
 
@@ -257,6 +277,12 @@ async function Order({ params }: Pick<Props, "params">) {
                       <Field label="Tracking number" name="trackingNumber" defaultValue={order.trackingNumber} />
                     </div>
                     <Field label="Tracking link (optional)" name="trackingUrl" defaultValue={order.trackingUrl} placeholder="https://" />
+                    {emailsOn ? (
+                      <label className="flex min-h-11 items-center gap-3">
+                        <input type="checkbox" name="notify" defaultChecked className="h-5 w-5 accent-[var(--color-accent)]" />
+                        <span>Email the customer these tracking details</span>
+                      </label>
+                    ) : null}
                   </OrderActionForm>
                 </div>
               </details>
@@ -270,8 +296,22 @@ async function Order({ params }: Pick<Props, "params">) {
               />
             ) : null}
 
-            {order.status === "CANCELLED" || order.status === "REFUNDED" ? (
-              <p className="text-bone-dim">This order was cancelled. Nothing more to do.</p>
+            {order.status === "CANCELLED" ? (
+              <p className="text-bone-dim">
+                This order was cancelled.
+                {!canRefund
+                  ? " Nothing more to do."
+                  : order.refundedCents > 0
+                    ? ` ${formatMoney(refundable)} has not been refunded.`
+                    : " The customer has not been refunded yet."}
+              </p>
+            ) : null}
+            {order.status === "REFUNDED" ? (
+              <p className="text-bone-dim">
+                {refundable > 0
+                  ? `This order was closed by a refund, but ${formatMoney(refundable)} of it did not go through. Use Refund to send it again.`
+                  : "This order was refunded in full. Nothing more to do."}
+              </p>
             ) : null}
           </section>
 
@@ -321,6 +361,18 @@ async function Order({ params }: Pick<Props, "params">) {
                 {order.email}
               </a>
             </div>
+            {emailsOn ? (
+              <OrderActionForm
+                action={resendConfirmationAction}
+                orderNumber={order.orderNumber}
+                submitLabel="Send the confirmation email again"
+                pendingLabel="Sending…"
+              />
+            ) : (
+              <p className={small}>
+                Email sending isn&apos;t set up yet, so customers don&apos;t get order emails.
+              </p>
+            )}
           </section>
 
           {/* Shipping address */}
@@ -383,15 +435,61 @@ async function Order({ params }: Pick<Props, "params">) {
                 <dt className={small}>Payment reference</dt>
                 <dd className="break-all font-mono text-xs">{order.paymentRef ?? "None"}</dd>
               </div>
+              {order.refundedCents > 0 ? (
+                <div>
+                  <dt className={small}>Refunded so far</dt>
+                  <dd>
+                    {formatMoney(order.refundedCents)} of {formatMoney(order.totalCents)}
+                  </dd>
+                </div>
+              ) : null}
             </dl>
+
+            {canRefund ? (
+              <details className="border-t border-line pt-3">
+                <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold">
+                  Refund
+                </summary>
+                <div className="flex flex-col gap-3 pt-2">
+                  <p className={small}>
+                    Sends the money back to the customer through Square. This can&apos;t be
+                    undone. A full refund also closes the order.
+                    {emailsOn ? " The customer is emailed." : ""}
+                  </p>
+                  <OrderActionForm
+                    action={refundAction}
+                    orderNumber={order.orderNumber}
+                    submitLabel="Send refund"
+                    pendingLabel="Refunding…"
+                  >
+                    <input type="hidden" name="refundedBefore" value={order.refundedCents} />
+                    {/* The keys reset the amount to what is left, and clear the reason, after each refund. */}
+                    <Field
+                      key={refundable}
+                      label={`Amount (up to ${formatMoney(refundable)})`}
+                      name="amount"
+                      defaultValue={(refundable / 100).toFixed(2)}
+                      required
+                    />
+                    <Field
+                      key={`reason-${refundable}`}
+                      label="Reason (optional)"
+                      name="reason"
+                      id="field-refund-reason"
+                      placeholder="Arrived damaged"
+                    />
+                  </OrderActionForm>
+                </div>
+              </details>
+            ) : null}
           </section>
 
           {open ? (
             <section className={panel}>
               <h2 className={heading}>Cancel order</h2>
               <p className={small}>
-                Cancelling here does not give the money back. Refund the payment in Square first
-                (find it by the payment reference above), then cancel it here.
+                To cancel and give the money back, use Refund above: a full refund closes the
+                order by itself. Cancelling here only stops the order and returns no money.
               </p>
               <details>
                 <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm underline underline-offset-4">

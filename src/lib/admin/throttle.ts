@@ -65,3 +65,23 @@ export async function clearFailures(keys: AttemptKeys): Promise<void> {
 }
 
 export const LOCKOUT_MESSAGE = `Too many attempts. Try again in ${WINDOW_MINUTES} minutes.`;
+
+/* A simple counter for anything else that needs slowing down. */
+
+export async function clientAddress(): Promise<string> {
+  const forwarded = (await headers()).get("x-forwarded-for");
+  return forwarded?.split(",")[0]?.trim() || "unknown";
+}
+
+/** True once `key` has been counted `limit` times in the last 15 minutes. */
+export async function isOverLimit(key: string, limit: number): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ failures: count() })
+    .from(adminLoginAttempts)
+    .where(and(eq(adminLoginAttempts.key, key), gt(adminLoginAttempts.createdAt, windowStart())));
+  return row.failures >= limit;
+}
+
+export async function countAgainst(key: string): Promise<void> {
+  await getDb().insert(adminLoginAttempts).values({ key });
+}

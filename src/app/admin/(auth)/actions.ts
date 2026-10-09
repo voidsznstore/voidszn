@@ -12,8 +12,10 @@ import {
   hashPassword,
   verifyPassword,
 } from "@/lib/admin/passwords";
+import { requestPasswordReset, resetPassword } from "@/lib/admin/password-reset";
 import { createSession, destroySession, requireSignedIn } from "@/lib/admin/session";
 import { SETUP_SETTING, isSetupCodeValid } from "@/lib/admin/setup";
+import { isEmailConfigured } from "@/lib/email/send";
 import {
   checkSecondStep,
   confirmEnrolment,
@@ -28,7 +30,10 @@ import {
   LOCKOUT_MESSAGE,
   attemptKeys,
   clearFailures,
+  clientAddress,
+  countAgainst,
   isLockedOut,
+  isOverLimit,
   recordFailure,
 } from "@/lib/admin/throttle";
 
@@ -145,6 +150,11 @@ export async function signOut(): Promise<void> {
   redirect("/admin/login");
 }
 
+/** Ends the session and stays put. The sign-out button then reloads the browser itself. */
+export async function endSession(): Promise<void> {
+  await destroySession();
+}
+
 const setupSchema = z.object({
   code: z.string().min(20).max(100),
   name: z.string().trim().min(1, "Enter your name.").max(100),
@@ -209,4 +219,59 @@ export async function createOwner(_previous: AuthFormState, form: FormData): Pro
 
   await createSession(adminId);
   redirect("/admin");
+}
+
+export type ResetRequestState = { error?: string; sent?: boolean };
+
+/** "Forgot my password": emails a reset link. The answer is the same whether or not the address has an account. */
+export async function requestReset(
+  _previous: ResetRequestState,
+  form: FormData,
+): Promise<ResetRequestState> {
+  if (!isEmailConfigured()) {
+    return { error: "Password reset by email isn't set up yet." };
+  }
+  const parsed = email.safeParse(form.get("email"));
+  if (!parsed.success) return { error: "Enter a valid email address." };
+
+  const key = `reset:${await clientAddress()}`;
+  if (await isOverLimit(key, 5)) return { error: LOCKOUT_MESSAGE };
+  await countAgainst(key);
+
+  await requestPasswordReset(parsed.data);
+  return { sent: true };
+}
+
+/** Sets a new password from a reset link. */
+export async function chooseNewPassword(
+  _previous: AuthFormState,
+  form: FormData,
+): Promise<AuthFormState> {
+  const parsed = z
+    .object({
+      token: z.string().min(20).max(100),
+      password: z
+        .string()
+        .min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters.`)
+        .max(MAX_PASSWORD_LENGTH),
+      confirm: z.string(),
+    })
+    .safeParse({
+      token: form.get("token"),
+      password: form.get("password"),
+      confirm: form.get("confirm"),
+    });
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return {
+      error: issue?.path[0] === "token" ? "This reset link is no longer valid." : issue?.message,
+    };
+  }
+  if (parsed.data.password !== parsed.data.confirm) {
+    return { error: "The two passwords don't match." };
+  }
+  if (!(await resetPassword(parsed.data.token, parsed.data.password))) {
+    return { error: "This reset link is no longer valid. Ask for a new one." };
+  }
+  redirect("/admin/login?reset=1");
 }

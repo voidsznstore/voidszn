@@ -1,15 +1,22 @@
-import { isFromSquare, isSquareConfigured, isSquareId } from "@/lib/payments/square";
+import { getDb } from "@/db";
+import { flagFailedRefund } from "@/db/queries/admin-orders";
+import { getRefund, isFromSquare, isSquareConfigured, isSquareId } from "@/lib/payments/square";
 import { settlePayment } from "@/lib/payments/square-orders";
 
 type PaymentEvent = {
   event_id?: string;
   type?: string;
-  data?: { object?: { payment?: { id?: string; status?: string } } };
+  data?: {
+    object?: {
+      payment?: { id?: string; status?: string };
+      refund?: { id?: string; status?: string };
+    };
+  };
 };
 
 /**
- * Receives payment events from Square and saves the order when a payment
- * completes. Customers don't always make it back to the site after paying, so
+ * Receives events from Square. Saves the order when a payment completes, and
+ * flags an order when a refund fails. Customers don't always make it back to the site after paying, so
  * this is what makes sure no paid order is missed.
  *
  * - Every request must be signed by Square.
@@ -40,6 +47,29 @@ export async function POST(request: Request) {
     event = JSON.parse(body) as PaymentEvent;
   } catch {
     return new Response("Unreadable event", { status: 400 });
+  }
+
+  // A refund Square accepted can still fail later. When it does, flag the order.
+  const refundNotice = event.data?.object?.refund;
+  if (event.type === "refund.updated" && isSquareId(refundNotice?.id)) {
+    if (refundNotice.status !== "FAILED" && refundNotice.status !== "REJECTED") {
+      return Response.json({ received: true });
+    }
+    try {
+      // As with payments, the event only says which refund to look at.
+      const refund = await getRefund(refundNotice.id);
+      if (refund?.payment_id && (refund.status === "FAILED" || refund.status === "REJECTED")) {
+        await flagFailedRefund(getDb(), refund.payment_id, {
+          id: refund.id,
+          status: refund.status,
+          amountCents: refund.amount_money?.amount ?? 0,
+        });
+      }
+    } catch (error) {
+      console.error(`[webhook] ${event.event_id}: refund check failed`, error);
+      return new Response("Could not process event", { status: 500 });
+    }
+    return Response.json({ received: true });
   }
 
   const payment = event.data?.object?.payment;

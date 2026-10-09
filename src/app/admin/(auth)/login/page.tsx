@@ -16,13 +16,18 @@ export default function SignInPage({ searchParams }: PageProps<"/admin/login">) 
   );
 }
 
-/** Explains why someone has been sent back here from the code step. */
+/** Explains why someone has landed here: after a password reset, or sent back from the code step. */
 async function Notice({ searchParams }: Pick<PageProps<"/admin/login">, "searchParams">) {
-  const { expired } = await searchParams;
-  if (!expired) return null;
+  const { expired, reset } = await searchParams;
+  const message = reset
+    ? "Password changed. Sign in with the new one."
+    : expired
+      ? "That took too long, or the code was wrong too many times. Sign in again."
+      : null;
+  if (!message) return null;
   return (
     <p className="border border-line bg-ash-soft px-4 py-3 text-center text-sm text-bone-dim">
-      That took too long, or the code was wrong too many times. Sign in again.
+      {message}
     </p>
   );
 }

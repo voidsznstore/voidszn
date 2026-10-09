@@ -42,7 +42,13 @@ sales), just in ordered by `products.created_at`.
 - **First account:** created through a one-time link (`/admin/setup?code=...`). Only the
   hash of the code is in the database. The link dies once an admin exists or after 14
   days. To issue a new one, add a migration like `drizzle/0002_admin_setup_link.sql`
-  with a fresh hash. There is no password reset by email yet.
+  with a fresh hash.
+- **Password:** "Forgot your password?" on the sign-in page emails a link that works
+  once, for an hour (`src/lib/admin/password-reset.ts`; only the link's hash is
+  stored). It needs email to be set up. A reset signs every browser out and does not
+  get around the authenticator app. The Security screen changes the password for
+  someone who knows the current one.
+- **Signing out reloads the browser** on purpose, so no admin page stays in memory.
 - **Every admin page and action calls `requireAdmin()`.** The request proxy
   (`src/proxy.ts`) only checks that a cookie is present, as a fast first filter.
 - **Products:** one price per product with optional per-size prices. Every color and
@@ -50,12 +56,27 @@ sales), just in ordered by `products.created_at`.
   `/api/admin/uploads` and stored in R2 (`src/lib/storage.ts`).
 - **Orders:** worked by hand for now: mark as sent to the printer, then shipped with
   tracking, then delivered. Every change is written to the order's history with who
-  did it. The store does not email customers yet; the order page has a ready-written
+  did it.
+- **Refunds:** the Refund box on an order sends the money back through Square, in full
+  or in part, and counts it in `orders.refunded_cents`. A full refund closes the order.
+  Each refund carries a key built from the order, what was already refunded, the
+  amount and how many attempts have finished, so a second click or a retry after no
+  answer can never refund twice. If Square reports later that a refund failed
+  (`refund.updated` webhook), the amount is taken back off the order and the order is
+  flagged. Cancelling an order still returns no money by itself.
+- **Emails to customers** (`src/lib/email`): order placed (sent once, by whichever of
+  the webhook or the confirmation page saves the order), shipped (a ticked box on the
+  shipping form) and refunded. Each is written to the order's history, sent or failed.
+  A failed email never undoes the order change. Sent through Resend from
+  `siteConfig.ordersEmail`; needs `RESEND_API_KEY` and the domain verified in Resend.
+  Without the key the store runs as before and the order page offers a ready-written
   tracking email that opens in the owner's mail app.
-- **Cancelling an order does not refund it.** Refund in Square first.
+- **Admin changes show on the store straight away:** every product and category action
+  clears the catalog cache (`CATALOG_TAG`). Prices at checkout are read from the
+  database every time.
 
-Not built yet: refunds from the admin, order emails, password reset and change, staff
-accounts, discount codes, the fulfilment connection to the printer.
+Not built yet: staff accounts, discount codes, the "delayed order" email, the
+fulfilment connection to the printer.
 
 ## Forms that need the backend
 
@@ -90,7 +111,6 @@ Payments run on Square. All Square code is in `src/lib/payments/`.
   the location and registers its own webhook. The webhook's signature key is kept in
   `store_settings`.
 - Shipping is charged at the printer's rate (`siteConfig.shipping.rates`).
-- `/api/health` reports the payment setup without exposing anything secret.
-
-Still to do in admin: order list and detail (sortable by category), refunds (call
-Square, then mark the order), the "delayed" email action, and order emails.
+- `/api/health` reports the payment setup without exposing anything secret. It also
+  saves a tiny test image and loads it back from the public image address (`upload`),
+  and says whether email can go out (`email`).

@@ -188,3 +188,50 @@ export async function checkStorage(): Promise<string> {
     return "error: could not reach storage";
   }
 }
+
+/** A 1x1 PNG, used to try a real upload. */
+const PROBE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+);
+export const PROBE_KEY = "_health/probe.png";
+
+let uploadStatus: { value: string; at: number } | null = null;
+const UPLOAD_STATUS_TTL_MS = 10 * 60_000;
+
+/**
+ * Tries the whole photo path: saves a tiny image the same way the admin does,
+ * then loads it back from the public address shoppers' browsers use. For the
+ * health check. Always the same small file, and at most once every ten minutes.
+ */
+export async function checkUpload(): Promise<string> {
+  const config = readConfig();
+  if (!config) return "not configured";
+  if (uploadStatus && Date.now() - uploadStatus.at < UPLOAD_STATUS_TTL_MS) return uploadStatus.value;
+
+  let value: string;
+  try {
+    const saved = await send(config, "PUT", PROBE_KEY, {
+      body: PROBE_PNG,
+      headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=60" },
+    });
+    if (!saved.ok) {
+      value = `error: storage refused the upload (${saved.status})`;
+    } else {
+      const shown = await fetch(`${config.publicUrl}/${PROBE_KEY}`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
+      });
+      const bytes = shown.ok ? Buffer.from(await shown.arrayBuffer()) : null;
+      value = !bytes
+        ? `error: saved, but the public address answered ${shown.status}`
+        : bytes.equals(PROBE_PNG)
+          ? "ok"
+          : "error: saved, but the public address returned something else";
+    }
+  } catch {
+    value = "error: could not reach storage";
+  }
+  uploadStatus = { value, at: Date.now() };
+  return value;
+}

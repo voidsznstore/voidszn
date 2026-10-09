@@ -152,6 +152,22 @@ export const adminLoginChallenges = pgTable("admin_login_challenges", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
 
+/** A "forgot my password" link that has been emailed. Works once, for a short time. Stored hashed. */
+export const adminPasswordResets = pgTable(
+  "admin_password_resets",
+  {
+    id: id(),
+    adminId: uuid("admin_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    createdAt: createdAt(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+  },
+  (t) => [index("admin_password_resets_admin_idx").on(t.adminId)],
+);
+
 /** One-time codes for signing in when the phone with the authenticator app is gone. Stored hashed. */
 export const adminRecoveryCodes = pgTable(
   "admin_recovery_codes",
@@ -384,6 +400,8 @@ export const orders = pgTable(
     paymentRef: text("payment_ref").unique(),
     paymentStatus: paymentStatus("payment_status").notNull().default("UNPAID"),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    /** How much of the total has been given back, across every refund. */
+    refundedCents: integer("refunded_cents").notNull().default(0),
 
     shippingName: text("shipping_name").notNull(),
     shippingAddress: jsonb("shipping_address").$type<Address>().notNull(),
@@ -411,6 +429,10 @@ export const orders = pgTable(
     index("orders_fulfillment_status_idx").on(t.fulfillmentStatus),
     index("orders_email_idx").on(t.email),
     check("orders_total_nonneg", sql`${t.totalCents} >= 0`),
+    check(
+      "orders_refund_within_total",
+      sql`${t.refundedCents} >= 0 AND ${t.refundedCents} <= ${t.totalCents}`,
+    ),
   ],
 );
 
