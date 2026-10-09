@@ -141,7 +141,7 @@ async function readEmailStatus(): Promise<EmailStatus> {
   if (!list.ok) {
     // A key that is only allowed to send can't look at domains.
     return list.data?.name === "restricted_api_key"
-      ? { status: "error: the key can only send, so the domain can't be checked or set up from here" }
+      ? { status: "on, with a send-only key (the domain can't be checked from here)" }
       : { status: `error: ${list.status}` };
   }
 
