@@ -4,7 +4,13 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { type CampaignInput, deleteDraft, saveCampaign, startCampaign } from "@/db/queries/admin-campaigns";
+import {
+  type CampaignInput,
+  deleteDraft,
+  getCampaign,
+  saveCampaign,
+  startCampaign,
+} from "@/db/queries/admin-campaigns";
 import { FormError } from "@/db/queries/admin-catalog";
 import { requireAdmin } from "@/lib/admin/session";
 import { sendCampaign, sendTest } from "@/lib/email/campaigns";
@@ -21,7 +27,8 @@ const webLink = z
 
 const schema = z
   .object({
-    id: z.string().uuid().optional(),
+    /** Chosen by the editor, so a repeated save or send is the same campaign. */
+    id: z.string().uuid(),
     subject: text(150).min(1, "Give the email a subject."),
     preheader: text(150),
     body: text(10_000).min(1, "Write the message."),
@@ -35,8 +42,18 @@ const schema = z
 
 export type CampaignResult = { error: string } | { id: string; done?: string };
 
+type Saved = {
+  id: string;
+  content: CampaignInput;
+  email: string;
+  /** False when the campaign has already gone out, so nothing was changed. */
+  wasDraft: boolean;
+};
+
+const ALREADY_SENT = "This campaign has already been sent, so it can't be changed.";
+
 /** Reads the editor's contents and saves them as the draft. */
-async function save(input: unknown): Promise<{ error: string } | { id: string; content: CampaignInput; email: string }> {
+async function save(input: unknown): Promise<{ error: string } | Saved> {
   const admin = await requireAdmin();
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the email and try again." };
@@ -47,17 +64,14 @@ async function save(input: unknown): Promise<{ error: string } | { id: string; c
   if (content.imageUrl && !(storage && content.imageUrl.startsWith(`${storage}/`))) {
     return { error: "Add the photo again using the photo button." };
   }
-  try {
-    return { id: await saveCampaign(getDb(), admin.email, id, content), content, email: admin.email };
-  } catch (error) {
-    if (error instanceof FormError) return { error: error.message };
-    throw error;
-  }
+  const wasDraft = await saveCampaign(getDb(), admin.email, id, content);
+  return { id, content, email: admin.email, wasDraft };
 }
 
 export async function saveCampaignAction(input: unknown): Promise<CampaignResult> {
   const saved = await save(input);
   if ("error" in saved) return saved;
+  if (!saved.wasDraft) return { error: ALREADY_SENT };
   refresh();
   return { id: saved.id, done: "Draft saved." };
 }
@@ -66,6 +80,7 @@ export async function saveCampaignAction(input: unknown): Promise<CampaignResult
 export async function sendTestAction(input: unknown): Promise<CampaignResult> {
   const saved = await save(input);
   if ("error" in saved) return saved;
+  if (!saved.wasDraft) return { error: ALREADY_SENT };
   if (!isEmailConfigured()) return { error: "Email sending isn't set up yet." };
 
   const result = await sendTest(saved.content, saved.email);
@@ -80,7 +95,11 @@ const progressNote = (progress: Awaited<ReturnType<typeof sendCampaign>>) =>
     ? `Sent to ${progress.sent} so far. ${progress.stopped} ${progress.pending} still to go: press Continue sending.`
     : undefined;
 
-/** Saves the draft and sends it to everyone who gets marketing emails. */
+/**
+ * Saves the draft and sends it to everyone who gets marketing emails. Pressed
+ * again for a campaign that is already going out (a retry after a lost answer),
+ * it carries on with that one instead of starting another.
+ */
 export async function sendCampaignAction(input: unknown): Promise<CampaignResult> {
   const saved = await save(input);
   if ("error" in saved) return saved;
@@ -113,6 +132,10 @@ export async function continueCampaignAction(
   await requireAdmin();
   const id = z.string().uuid().safeParse(form.get("id"));
   if (!id.success) return { error: "That campaign could not be found." };
+  const detail = await getCampaign(getDb(), id.data);
+  if (!detail || detail.campaign.status === "DRAFT") {
+    return { error: "That campaign hasn't been sent yet." };
+  }
   const progress = await sendCampaign(id.data);
   refresh();
   return progress.stopped

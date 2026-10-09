@@ -75,12 +75,27 @@ sales), just in ordered by `products.created_at`.
   They go to customers marked "Agreed to get marketing emails" plus `subscribers`,
   minus anyone in `email_optouts`. Sent through Resend from `siteConfig.newsEmail`.
   Starting a campaign writes one `campaign_sends` row per person, each with its own
-  unsubscribe token, so nobody can be sent the same campaign twice and a send that
-  stops (the email plan's limit, a timeout) carries on from where it was.
+  unsubscribe token. A sender takes people from that queue under a name for the
+  request they go in (`batch_key`); a person can only be taken once, goes back in the
+  queue only when it is certain nothing was sent, and is otherwise sent again later
+  under the same name, which Resend recognises as a repeat. So nobody gets a campaign
+  twice, whether Send is pressed twice, two people press it, or an answer is lost
+  (`npm run test:campaign`). The editor chooses a new campaign's id, so a repeated
+  save or send is the same campaign.
   Every email has an unsubscribe link (`/unsubscribe/[token]`) and the one-click
   header mail apps use (`POST /api/unsubscribe/[token]`). Unsubscribing takes effect
   at once. **Campaigns can't be sent until `siteConfig.mailingAddress` is filled in**:
   the postal address is required at the foot of every marketing email.
+- **Inbox** (`/admin/inbox`, `src/lib/mail/gmail.ts`): the store's Gmail
+  (`siteConfig.inboxEmail`) read over IMAP and sent from over SMTP, signed in with an
+  app password in `GMAIL_APP_PASSWORD`. Nothing is copied into the database; each page
+  reads Gmail directly, so it is always what Gmail has. List (Inbox and Sent), search
+  (Gmail's own search), open, reply, write new, download attachments, mark unread.
+  **Email content is untrusted.** HTML bodies are only ever shown inside a sandboxed
+  frame (no scripts, no forms, no access to the admin) with a rule that blocks every
+  outside request; pictures load only when asked for. Attachments are always sent as
+  downloads with a neutral type. Keep it that way: never put a message's HTML into the
+  admin page itself.
 - **Refunds:** the Refund box on an order sends the money back through Square, in full
   or in part, and counts it in `orders.refunded_cents`. A full refund closes the order.
   Each refund carries a key built from the order, what was already refunded, the

@@ -43,6 +43,9 @@ export function CampaignEditor({
   const router = useRouter();
   const fieldId = useId();
   const fileInput = useRef<HTMLInputElement>(null);
+  // A new campaign gets its id on the first save and keeps it, so saving or
+  // sending again is always the same campaign, never a second one.
+  const draftId = useRef<string | null>(id ?? null);
   const [pending, startTransition] = useTransition();
   const [working, setWorking] = useState<"save" | "test" | "send" | null>(null);
   const [message, setMessage] = useState<{
@@ -83,8 +86,9 @@ export function CampaignEditor({
   ) {
     setMessage(null);
     setWorking(kind);
+    draftId.current ??= crypto.randomUUID();
     startTransition(async () => {
-      const result = await action({ id, ...current }).catch(() => ({
+      const result = await action({ id: draftId.current, ...current }).catch(() => ({
         error: "Something went wrong. Check your connection and try again.",
       }));
       setWorking(null);

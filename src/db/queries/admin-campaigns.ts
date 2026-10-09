@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import type { Database } from "../index";
 import { campaignSends, campaigns, customers, emailOptouts, subscribers } from "../schema";
 import { FormError } from "./admin-catalog";
@@ -72,27 +72,30 @@ const fields = (input: CampaignInput) => ({
   buttonUrl: input.buttonUrl.trim() || null,
 });
 
-/** Creates a draft, or saves changes to one. A campaign that has gone out can't be changed. */
+/**
+ * Saves a draft under `id`, creating it the first time. The editor picks the id,
+ * so saving or sending the same new campaign twice can never make two of them.
+ * Returns false when the campaign has already gone out and can't be changed.
+ */
 export async function saveCampaign(
   db: Database,
   actor: string,
-  id: string | undefined,
+  id: string,
   input: CampaignInput,
-): Promise<string> {
-  if (!id) {
-    const [row] = await db
-      .insert(campaigns)
-      .values({ ...fields(input), createdBy: actor })
-      .returning({ id: campaigns.id });
-    return row.id;
-  }
-  const [row] = await db
+): Promise<boolean> {
+  const [created] = await db
+    .insert(campaigns)
+    .values({ id, ...fields(input), createdBy: actor })
+    .onConflictDoNothing()
+    .returning({ id: campaigns.id });
+  if (created) return true;
+
+  const [updated] = await db
     .update(campaigns)
     .set({ ...fields(input), updatedAt: new Date() })
     .where(and(eq(campaigns.id, id), eq(campaigns.status, "DRAFT")))
     .returning({ id: campaigns.id });
-  if (!row) throw new FormError("This campaign has already been sent, so it can't be changed.");
-  return row.id;
+  return Boolean(updated);
 }
 
 export async function deleteDraft(db: Database, id: string): Promise<void> {
@@ -139,21 +142,109 @@ export async function startCampaign(db: Database, id: string): Promise<void> {
   });
 }
 
-export type PendingSend = { id: string; email: string; name: string | null; token: string };
+export type ClaimedSend = { id: string; email: string; name: string | null; token: string };
 
-/** The next people still waiting for a campaign, in a fixed order. */
-export async function nextPending(db: Database, id: string, limit: number): Promise<PendingSend[]> {
-  return db
-    .select({
-      id: campaignSends.id,
-      email: campaignSends.email,
-      name: campaignSends.name,
-      token: campaignSends.token,
-    })
+const claimed = {
+  id: campaignSends.id,
+  email: campaignSends.email,
+  name: campaignSends.name,
+  token: campaignSends.token,
+};
+
+/**
+ * Takes the next people waiting for a campaign and marks them as being sent
+ * under `batchKey`. Two senders running at once can never take the same person:
+ * rows another sender is taking are passed over.
+ */
+export async function claimPending(
+  db: Database,
+  id: string,
+  batchKey: string,
+  limit: number,
+): Promise<ClaimedSend[]> {
+  const rows = await db
+    .update(campaignSends)
+    .set({ status: "SENDING", batchKey, claimedAt: new Date() })
+    .where(
+      inArray(
+        campaignSends.id,
+        db
+          .select({ id: campaignSends.id })
+          .from(campaignSends)
+          .where(and(eq(campaignSends.campaignId, id), eq(campaignSends.status, "PENDING")))
+          .orderBy(asc(campaignSends.email))
+          .limit(limit)
+          .for("update", { skipLocked: true }),
+      ),
+    )
+    .returning(claimed);
+  return rows.sort((a, b) => a.email.localeCompare(b.email));
+}
+
+/** How long a batch is left alone before its lost answer is chased. Longer than any one request. */
+const IN_FLIGHT_MS = 2 * 60_000;
+/** The email service remembers a batch's name for a day. After that a repeat would send again. */
+const REPEAT_SAFE_MS = 23 * 60 * 60_000;
+
+/**
+ * A batch that was handed to the email service a while ago with no answer
+ * recorded. Taking it again resets its clock, so only one sender chases it.
+ * Returns the same people in the same order as when it was first sent.
+ */
+export async function reclaimStale(
+  db: Database,
+  id: string,
+): Promise<{ batchKey: string; rows: ClaimedSend[] } | null> {
+  const now = Date.now();
+  // Too old to repeat safely: it can't be known whether these went.
+  await db
+    .update(campaignSends)
+    .set({ status: "FAILED", error: "It isn't known whether this one was sent" })
+    .where(
+      and(
+        eq(campaignSends.campaignId, id),
+        eq(campaignSends.status, "SENDING"),
+        lt(campaignSends.claimedAt, new Date(now - REPEAT_SAFE_MS)),
+      ),
+    );
+
+  const stale = and(
+    eq(campaignSends.campaignId, id),
+    eq(campaignSends.status, "SENDING"),
+    lt(campaignSends.claimedAt, new Date(now - IN_FLIGHT_MS)),
+  );
+  const [oldest] = await db
+    .select({ batchKey: campaignSends.batchKey })
     .from(campaignSends)
-    .where(and(eq(campaignSends.campaignId, id), eq(campaignSends.status, "PENDING")))
-    .orderBy(asc(campaignSends.email))
-    .limit(limit);
+    .where(stale)
+    .orderBy(asc(campaignSends.claimedAt))
+    .limit(1);
+  if (!oldest?.batchKey) return null;
+
+  const rows = await db
+    .update(campaignSends)
+    .set({ claimedAt: new Date() })
+    .where(and(stale, eq(campaignSends.batchKey, oldest.batchKey)))
+    .returning(claimed);
+  if (rows.length === 0) return null;
+  return { batchKey: oldest.batchKey, rows: rows.sort((a, b) => a.email.localeCompare(b.email)) };
+}
+
+/** Moves people to a new request name, for sending them one at a time. */
+export async function rekey(db: Database, sendId: string, batchKey: string): Promise<void> {
+  await db
+    .update(campaignSends)
+    .set({ batchKey, claimedAt: new Date() })
+    .where(eq(campaignSends.id, sendId));
+}
+
+/** Puts people back in the queue. Only for when it is certain nothing was sent. */
+export async function releaseSends(db: Database, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(campaignSends)
+    .set({ status: "PENDING", batchKey: null, claimedAt: null })
+    .where(and(inArray(campaignSends.id, ids), eq(campaignSends.status, "SENDING")));
 }
 
 /** Which of these addresses have unsubscribed. */
@@ -179,10 +270,14 @@ export async function markSends(
     .where(inArray(campaignSends.id, ids));
 }
 
-/** Marks the campaign as finished once nobody is left waiting. */
+/** Marks the campaign as finished once nobody is waiting or part-way through being sent. */
 export async function finishIfDone(db: Database, id: string): Promise<boolean> {
-  const [waiting] = await nextPending(db, id, 1);
-  if (waiting) return false;
+  const [open] = await db
+    .select({ id: campaignSends.id })
+    .from(campaignSends)
+    .where(and(eq(campaignSends.campaignId, id), inArray(campaignSends.status, ["PENDING", "SENDING"])))
+    .limit(1);
+  if (open) return false;
   await db
     .update(campaigns)
     .set({ status: "SENT", sentAt: new Date(), updatedAt: new Date() })

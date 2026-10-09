@@ -14,3 +14,13 @@ export async function POST(_request: Request, { params }: RouteContext<"/api/uns
   if (email) await optOut(db, email, "one_click");
   return new Response(null, { status: 200 });
 }
+
+/**
+ * Some mail apps open the address in a browser instead of posting to it. Opening
+ * it changes nothing: it just leads to the page with the unsubscribe button.
+ */
+export async function GET(request: Request, { params }: RouteContext<"/api/unsubscribe/[token]">) {
+  const { token } = await params;
+  const safe = /^[A-Za-z0-9_-]{1,64}$/.test(token) ? token : "invalid";
+  return Response.redirect(new URL(`/unsubscribe/${safe}`, request.url), 303);
+}

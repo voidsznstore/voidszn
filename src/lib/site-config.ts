@@ -21,6 +21,8 @@ export const siteConfig = {
   ordersEmail: "orders@voidszn.com",
   /** The address marketing emails are sent from. Replies go to the support address. */
   newsEmail: "hello@voidszn.com",
+  /** The Gmail account the admin's Inbox reads and replies from. */
+  inboxEmail: "voidsznstore@gmail.com",
   /** Where infringement notices go. Can be the same inbox as support. */
   legalEmail: "legal@voidszn.com",
   /** State whose law governs the terms. */

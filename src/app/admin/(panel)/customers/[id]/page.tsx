@@ -8,6 +8,7 @@ import { getDb } from "@/db";
 import { getCustomer } from "@/db/queries/admin-customers";
 import { formatDate, formatDateTime, statusLabel } from "@/lib/admin/format";
 import { requireAdmin } from "@/lib/admin/session";
+import { isInboxConfigured } from "@/lib/mail/gmail";
 import { formatMoney } from "@/lib/money";
 
 export const metadata: Metadata = { title: "Customer" };
@@ -127,6 +128,22 @@ async function Customer({ params }: Pick<Props, "params">) {
                 {customer.email}
               </a>
             </p>
+            {isInboxConfigured() ? (
+              <p className="flex flex-wrap gap-x-6 text-sm">
+                <Link
+                  href={`/admin/inbox/new?to=${encodeURIComponent(customer.email)}`}
+                  className="inline-flex min-h-11 items-center underline underline-offset-4"
+                >
+                  Write to them
+                </Link>
+                <Link
+                  href={`/admin/inbox?q=${encodeURIComponent(customer.email)}`}
+                  className="inline-flex min-h-11 items-center underline underline-offset-4"
+                >
+                  Emails from them
+                </Link>
+              </p>
+            ) : null}
             {/* Keyed on the customer, not on what is saved: a re-made form would lose its "Saved." */}
             <CustomerForm
               key={customer.id}

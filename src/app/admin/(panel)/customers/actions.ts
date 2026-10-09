@@ -13,7 +13,10 @@ import {
 } from "@/db/queries/admin-customers";
 import { requireAdmin } from "@/lib/admin/session";
 
-export type CustomerFormState = { error?: string; saved?: boolean };
+export type CustomerFormState = { error?: string; saved?: boolean; note?: string };
+
+const KEPT_OFF =
+  "They unsubscribed, so they stay off the marketing list. To put them back, tick the box again on this page, and only if they asked.";
 
 const text = (max: number) => z.string().trim().max(max);
 
@@ -70,14 +73,14 @@ export async function createCustomerAction(
   const parsed = read(form);
   if ("error" in parsed) return { error: parsed.error };
 
-  let id: string;
+  let result;
   try {
-    id = await createCustomer(getDb(), parsed.input);
+    result = await createCustomer(getDb(), parsed.input);
   } catch (error) {
     if (error instanceof FormError) return { error: error.message };
     throw error;
   }
-  redirect(`/admin/customers/${id}`);
+  redirect(`/admin/customers/${result.id}`);
 }
 
 export async function updateCustomerAction(
@@ -90,14 +93,15 @@ export async function updateCustomerAction(
   const parsed = read(form);
   if ("error" in parsed) return { error: parsed.error };
 
+  let result;
   try {
-    await updateCustomer(getDb(), id.data, parsed.input);
+    result = await updateCustomer(getDb(), id.data, parsed.input, form.get("knewOptOut") === "1");
   } catch (error) {
     if (error instanceof FormError) return { error: error.message };
     throw error;
   }
   refresh();
-  return { saved: true };
+  return { saved: true, note: result.keptOptOut ? KEPT_OFF : undefined };
 }
 
 export async function deleteCustomerAction(

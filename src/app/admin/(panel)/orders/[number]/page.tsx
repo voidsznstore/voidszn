@@ -11,6 +11,7 @@ import { type OrderDetail, getOrderDetail } from "@/db/queries/admin-orders";
 import { formatDateTime, statusLabel } from "@/lib/admin/format";
 import { requireAdmin } from "@/lib/admin/session";
 import { isEmailConfigured } from "@/lib/email/send";
+import { isInboxConfigured } from "@/lib/mail/gmail";
 import { optionLabel } from "@/lib/email/templates";
 import { formatMoney } from "@/lib/money";
 import { siteConfig } from "@/lib/site-config";
@@ -411,6 +412,14 @@ async function Order({ params }: Pick<Props, "params">) {
               >
                 Their details and other orders
               </Link>
+              {isInboxConfigured() ? (
+                <Link
+                  href={`/admin/inbox/new?to=${encodeURIComponent(order.email)}&subject=${encodeURIComponent(`Your ${siteConfig.name} order ${order.orderNumber}`)}`}
+                  className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                >
+                  Write to them about this order
+                </Link>
+              ) : null}
             </div>
             {emailsOn ? (
               <OrderActionForm

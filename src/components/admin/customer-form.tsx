@@ -69,6 +69,8 @@ export function CustomerForm({ customer, unsubscribedOn }: Props) {
   return (
     <form action={action} onSubmit={onSubmit} className="flex flex-col gap-4">
       {customer.id ? <input type="hidden" name="id" value={customer.id} /> : null}
+      {/* Says this form was showing the unsubscribe, so ticking the box below is deliberate. */}
+      {unsubscribedOn ? <input type="hidden" name="knewOptOut" value="1" /> : null}
       {field("name", "Name", { maxLength: 120 })}
       {field("email", "Email", { type: "email", required: true, maxLength: 254 })}
       {field("phone", "Phone (optional)", { type: "tel", maxLength: 40 })}
@@ -122,7 +124,7 @@ export function CustomerForm({ customer, unsubscribedOn }: Props) {
           {pending ? "Saving…" : customer.id ? "Save" : "Add customer"}
         </button>
         <p role="alert" aria-live="polite" className={`text-sm ${state.error ? "text-accent" : "text-smoke"}`}>
-          {state.error ?? (state.saved && !pending ? "Saved." : "")}
+          {state.error ?? (state.saved && !pending ? `Saved. ${state.note ?? ""}`.trim() : "")}
         </p>
       </div>
     </form>

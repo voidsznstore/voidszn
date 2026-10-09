@@ -694,8 +694,18 @@ export const campaignSends = pgTable(
     name: text("name"),
     /** In this person's unsubscribe link. Random, so it can't be guessed for someone else. */
     token: text("token").notNull().unique(),
-    /** PENDING, SENT or FAILED. */
+    /**
+     * PENDING: waiting. SENDING: handed to the email service, answer not recorded yet.
+     * SENT, FAILED (refused) or SKIPPED (unsubscribed first): finished.
+     */
     status: text("status").notNull().default("PENDING"),
+    /**
+     * Names the request this row was sent in. If the answer to that request is
+     * lost, the same people are sent again under the same name, and the email
+     * service recognises the repeat instead of sending twice.
+     */
+    batchKey: text("batch_key"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
     error: text("error"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     createdAt: createdAt(),

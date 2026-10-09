@@ -186,21 +186,50 @@ const cause = (error: unknown) =>
     ? (error as { cause: unknown }).cause
     : error;
 
+type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
 /**
- * Saying yes to marketing emails again clears an earlier unsubscribe. The form
- * tells the owner only to do that when the customer asked.
+ * Settles whether this address gets marketing emails, and returns the answer.
+ *
+ * Someone who unsubscribed stays unsubscribed unless the owner ticked the box
+ * on a form that was showing the unsubscribe (`knewOptOut`), which is how they
+ * say "this person asked to be put back". A form opened before the unsubscribe,
+ * or one for a new customer, can never undo it by accident.
  */
-async function applyConsent(db: Pick<Database, "delete">, email: string, acceptsEmail: boolean) {
-  if (acceptsEmail) await db.delete(emailOptouts).where(eq(emailOptouts.email, email));
+async function settleConsent(
+  tx: Tx,
+  email: string,
+  wanted: boolean,
+  knewOptOut: boolean,
+): Promise<{ acceptsEmail: boolean; keptOptOut: boolean }> {
+  if (!wanted) return { acceptsEmail: false, keptOptOut: false };
+  const [optout] = await tx
+    .select({ email: emailOptouts.email })
+    .from(emailOptouts)
+    .where(eq(emailOptouts.email, email))
+    .limit(1);
+  if (!optout) return { acceptsEmail: true, keptOptOut: false };
+  if (!knewOptOut) return { acceptsEmail: false, keptOptOut: true };
+  await tx.delete(emailOptouts).where(eq(emailOptouts.email, email));
+  return { acceptsEmail: true, keptOptOut: false };
 }
 
-export async function createCustomer(db: Database, input: CustomerInput): Promise<string> {
+export type SaveCustomerResult = {
+  id: string;
+  /** True when the box was ticked but they had unsubscribed, so they were left off the list. */
+  keptOptOut: boolean;
+};
+
+export async function createCustomer(db: Database, input: CustomerInput): Promise<SaveCustomerResult> {
   const values = fields(input);
   try {
     return await db.transaction(async (tx) => {
-      const [row] = await tx.insert(customers).values(values).returning({ id: customers.id });
-      await applyConsent(tx, values.email, values.acceptsEmail);
-      return row.id;
+      const consent = await settleConsent(tx, values.email, values.acceptsEmail, false);
+      const [row] = await tx
+        .insert(customers)
+        .values({ ...values, acceptsEmail: consent.acceptsEmail })
+        .returning({ id: customers.id });
+      return { id: row.id, keptOptOut: consent.keptOptOut };
     });
   } catch (error) {
     if (isDuplicate(error) || isDuplicate(cause(error))) {
@@ -210,17 +239,24 @@ export async function createCustomer(db: Database, input: CustomerInput): Promis
   }
 }
 
-export async function updateCustomer(db: Database, id: string, input: CustomerInput): Promise<void> {
+export async function updateCustomer(
+  db: Database,
+  id: string,
+  input: CustomerInput,
+  /** Whether the form was showing that this customer had unsubscribed. */
+  knewOptOut: boolean,
+): Promise<SaveCustomerResult> {
   const values = fields(input);
   try {
-    await db.transaction(async (tx) => {
+    return await db.transaction(async (tx) => {
+      const consent = await settleConsent(tx, values.email, values.acceptsEmail, knewOptOut);
       const [row] = await tx
         .update(customers)
-        .set({ ...values, updatedAt: new Date() })
+        .set({ ...values, acceptsEmail: consent.acceptsEmail, updatedAt: new Date() })
         .where(eq(customers.id, id))
         .returning({ id: customers.id });
       if (!row) throw new FormError("That customer no longer exists.");
-      await applyConsent(tx, values.email, values.acceptsEmail);
+      return { id: row.id, keptOptOut: consent.keptOptOut };
     });
   } catch (error) {
     if (isDuplicate(error) || isDuplicate(cause(error))) {

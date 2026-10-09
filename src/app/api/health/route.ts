@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { getDb } from "@/db";
 import { getSquareStatus } from "@/lib/payments/square";
 import { checkEmail } from "@/lib/email/send";
+import { checkInbox } from "@/lib/mail/gmail";
 import { checkStorage, checkUpload } from "@/lib/storage";
 
 /**
@@ -15,17 +16,19 @@ export async function GET() {
   // Always answer from the live database, never from a prerendered copy.
   await connection();
 
-  const [square, images, upload, email] = await Promise.all([
+  const [square, images, upload, email, inbox] = await Promise.all([
     getSquareStatus(),
     checkStorage(),
     checkUpload(),
     checkEmail(),
+    checkInbox(),
   ]);
   const payments = {
     ...square,
     images,
     upload,
     email: email.status,
+    inbox,
     // DNS records are public by nature, so listing the ones still needed gives nothing away.
     ...(email.dns ? { emailDns: email.dns } : {}),
   };

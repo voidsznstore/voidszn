@@ -71,21 +71,31 @@ export async function sendEmail(email: Email): Promise<SendResult> {
   }
 }
 
+/**
+ * What happened to a batch.
+ * - `sent`: every email in it was accepted.
+ * - `rejected`: something in the emails themselves was refused. Nothing was sent.
+ * - `limit`: the plan's limit or rate was hit. Nothing was sent; try later.
+ * - `blocked`: the key or the sending domain was refused. Nothing was sent, and
+ *   trying again won't help until that is fixed.
+ * - `unknown`: no clear answer came back. It may or may not have gone.
+ */
 export type BatchResult =
-  | { ok: true }
-  /** `retryLater` means nothing was wrong with the emails: the service is busy or at its limit. */
-  | { ok: false; reason: string; retryLater: boolean };
+  | { outcome: "sent" }
+  | { outcome: "rejected" | "limit" | "blocked" | "unknown"; reason: string };
 
 /**
  * Sends up to 100 emails in one request. All of them go or none do.
- * `idempotencyKey` names this exact batch, so a repeat of it is not sent twice.
+ * `idempotencyKey` names this exact batch: sent again with the same key and the
+ * same emails, it is not sent twice.
  */
 export async function sendBatch(emails: Email[], idempotencyKey: string): Promise<BatchResult> {
   const key = process.env.RESEND_API_KEY;
-  if (!key) return { ok: false, reason: "Email isn't set up yet.", retryLater: true };
+  if (!key) return { outcome: "blocked", reason: "Email isn't set up yet." };
 
+  let response: Response;
   try {
-    const response = await fetch(`${API()}/emails/batch`, {
+    response = await fetch(`${API()}/emails/batch`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
@@ -96,24 +106,33 @@ export async function sendBatch(emails: Email[], idempotencyKey: string): Promis
       cache: "no-store",
       signal: AbortSignal.timeout(30_000),
     });
-    if (response.ok) return { ok: true };
-
-    const data = (await response.json().catch(() => null)) as { name?: string } | null;
-    console.error(`[email] Batch failed (${response.status}${data?.name ? `: ${data.name}` : ""})`);
-    const limit = response.status === 429;
-    return {
-      ok: false,
-      retryLater: limit || response.status >= 500,
-      reason: limit
-        ? data?.name === "daily_quota_exceeded" || data?.name === "monthly_quota_exceeded"
-          ? "The email service's sending limit for your plan has been reached."
-          : "The email service asked to slow down."
-        : `The email service refused it (${response.status}).`,
-    };
   } catch (error) {
-    console.error("[email] Batch failed", error);
-    return { ok: false, reason: "The email service could not be reached.", retryLater: true };
+    console.error("[email] Batch got no answer", error);
+    return { outcome: "unknown", reason: "The email service didn't answer." };
   }
+  if (response.ok) return { outcome: "sent" };
+
+  const data = (await response.json().catch(() => null)) as { name?: string } | null;
+  console.error(`[email] Batch failed (${response.status}${data?.name ? `: ${data.name}` : ""})`);
+  if (response.status === 429) {
+    return {
+      outcome: "limit",
+      reason: /quota/.test(data?.name ?? "")
+        ? "The email service's sending limit for your plan has been reached."
+        : "The email service asked to slow down.",
+    };
+  }
+  if (response.status === 401 || response.status === 403) {
+    return {
+      outcome: "blocked",
+      reason: "The email service refused the store's key or sending domain.",
+    };
+  }
+  // 409 means this same batch is being handled, or was, under the same name.
+  if (response.status === 409 || response.status >= 500) {
+    return { outcome: "unknown", reason: "The email service didn't give a clear answer." };
+  }
+  return { outcome: "rejected", reason: `The email service refused it (${response.status}).` };
 }
 
 /** One DNS record the email service needs on the store's domain. */

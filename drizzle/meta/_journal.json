@@ -50,6 +50,13 @@
       "when": 1791522970011,
       "tag": "0006_customers_and_campaigns",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791525108296,
+      "tag": "0007_campaign_send_claims",
+      "breakpoints": true
     }
   ]
 }

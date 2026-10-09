@@ -1,13 +1,17 @@
 import "server-only";
-import { createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { getDb } from "@/db";
 import {
+  type ClaimedSend,
   type SendCounts,
+  claimPending,
   finishIfDone,
   getCampaign,
   markSends,
-  nextPending,
   optedOutAmong,
+  reclaimStale,
+  rekey,
+  releaseSends,
 } from "@/db/queries/admin-campaigns";
 import { siteConfig } from "@/lib/site-config";
 import { type Email, sendBatch, sendEmail } from "./send";
@@ -41,7 +45,7 @@ export async function sendTest(content: CampaignContent, to: string) {
 }
 
 const BATCH = 100;
-/** Stop starting new batches after this long, so the page gets an answer in good time. */
+/** Stop starting new requests after this long, so the page gets an answer in good time. */
 const TIME_BUDGET_MS = 40_000;
 
 export type SendProgress = SendCounts & {
@@ -50,14 +54,23 @@ export type SendProgress = SendCounts & {
 };
 
 /**
- * Sends a campaign to everyone still waiting for it. Can be called again to carry
- * on: people already sent to are never sent to twice.
+ * Sends a campaign to everyone still waiting for it, and can be called again to
+ * carry on. Nobody is sent the same campaign twice, even if this runs twice at
+ * once or an answer from the email service goes missing:
+ *
+ * - People are taken from the queue under a name for the request they go in,
+ *   and a person can only be taken by one sender.
+ * - They go back in the queue only when it is certain nothing was sent.
+ * - When no clear answer came back, the same people are sent again later under
+ *   the same name, which the email service recognises as a repeat.
  */
 export async function sendCampaign(id: string): Promise<SendProgress> {
   const db = getDb();
   const detail = await getCampaign(db, id);
   if (!detail) throw new Error("Campaign not found.");
   const { campaign } = detail;
+  if (campaign.status === "DRAFT") return { ...detail.sends };
+
   const content: CampaignContent = {
     subject: campaign.subject,
     preheader: campaign.preheader ?? "",
@@ -66,51 +79,88 @@ export async function sendCampaign(id: string): Promise<SendProgress> {
     buttonLabel: campaign.buttonLabel ?? "",
     buttonUrl: campaign.buttonUrl ?? "",
   };
+  const build = (row: ClaimedSend) => emailFor(content, row.email, row.token, `campaign/${id}/${row.id}`);
 
   const started = Date.now();
+  const outOfTime = () => Date.now() - started > TIME_BUDGET_MS;
   let stopped: string | undefined;
 
-  while (campaign.status !== "DRAFT") {
-    if (Date.now() - started > TIME_BUDGET_MS) {
-      stopped = "There are more to send than fit in one go.";
-      break;
-    }
-    const waiting = await nextPending(db, id, BATCH);
-    if (waiting.length === 0) break;
-
-    // Anyone who unsubscribed since the campaign was started is left out.
-    const gone = await optedOutAmong(db, waiting.map((row) => row.email));
-    await markSends(
-      db,
-      waiting.filter((row) => gone.has(row.email)).map((row) => row.id),
-      "SKIPPED",
-      "Unsubscribed before it was sent",
-    );
-    const batch = waiting.filter((row) => !gone.has(row.email));
-    if (batch.length === 0) continue;
-
-    const emails = batch.map((row) => emailFor(content, row.email, row.token, `campaign/${id}/${row.id}`));
-    // The key names this exact set of people, so a batch repeated after a lost
-    // answer is not sent twice.
-    const key = `campaign/${id}/${createHash("sha256").update(batch.map((row) => row.id).join(",")).digest("hex").slice(0, 32)}`;
-    const result = await sendBatch(emails, key);
-
-    if (result.ok) {
-      await markSends(db, batch.map((row) => row.id), "SENT");
-      continue;
-    }
-    if (result.retryLater) {
-      stopped = result.reason;
-      break;
-    }
-    // Something in the batch was refused. Send one at a time to find which.
-    for (const [index, row] of batch.entries()) {
-      const single = await sendEmail(emails[index]);
-      await markSends(db, [row.id], single.ok ? "SENT" : "FAILED", single.ok ? undefined : single.reason);
+  /** Sends one named request and records what happened. Returns a reason to stop, if any. */
+  async function deliver(batchKey: string, rows: ClaimedSend[]): Promise<string | undefined> {
+    const ids = rows.map((row) => row.id);
+    const result = await sendBatch(rows.map(build), `campaign/${id}/${batchKey}`);
+    switch (result.outcome) {
+      case "sent":
+        await markSends(db, ids, "SENT");
+        return undefined;
+      case "limit":
+      case "blocked":
+        // Certain that nothing went, so they wait in the queue again.
+        await releaseSends(db, ids);
+        return result.reason;
+      case "unknown":
+        // Left as they are. A later run repeats this same request by name.
+        return `${result.reason} The last batch will be checked again in a couple of minutes.`;
+      case "rejected":
+        if (rows.length === 1) {
+          await markSends(db, ids, "FAILED", result.reason);
+          return undefined;
+        }
+        // Something in the batch was refused and none of it went. Try each
+        // person separately, each under a name of their own, to find which.
+        for (const [index, row] of rows.entries()) {
+          if (outOfTime()) {
+            await releaseSends(db, rows.slice(index).map((rest) => rest.id));
+            return "There are more to send than fit in one go.";
+          }
+          const ownKey = `one-${row.id}`;
+          await rekey(db, row.id, ownKey);
+          const stop = await deliver(ownKey, [row]);
+          if (stop) {
+            await releaseSends(db, rows.slice(index + 1).map((rest) => rest.id));
+            return stop;
+          }
+        }
+        return undefined;
     }
   }
 
-  if (!stopped) await finishIfDone(db, id);
+  while (!stopped) {
+    if (outOfTime()) {
+      stopped = "There are more to send than fit in one go.";
+      break;
+    }
+
+    // First, anything handed over earlier whose answer never came back.
+    const stale = await reclaimStale(db, id);
+    if (stale) {
+      stopped = await deliver(stale.batchKey, stale.rows);
+      continue;
+    }
+
+    const batchKey = randomUUID();
+    const taken = await claimPending(db, id, batchKey, BATCH);
+    if (taken.length === 0) break;
+
+    // Anyone who unsubscribed since the campaign was started is left out.
+    const gone = await optedOutAmong(db, taken.map((row) => row.email));
+    await markSends(
+      db,
+      taken.filter((row) => gone.has(row.email)).map((row) => row.id),
+      "SKIPPED",
+      "Unsubscribed before it was sent",
+    );
+    const batch = taken.filter((row) => !gone.has(row.email));
+    if (batch.length > 0) stopped = await deliver(batchKey, batch);
+  }
+
+  const finished = await finishIfDone(db, id);
   const after = await getCampaign(db, id);
-  return { ...(after?.sends ?? detail.sends), stopped };
+  const sends = after?.sends ?? detail.sends;
+  if (!finished && !stopped && sends.pending > 0) {
+    // Nothing left to take, but some are still part-way: another run has them,
+    // or their answer is being waited for.
+    stopped = "The last batch is still being confirmed. Check again in a couple of minutes.";
+  }
+  return { ...sends, stopped };
 }
