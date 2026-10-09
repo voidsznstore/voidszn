@@ -290,7 +290,7 @@ async function giveUp(order: ClaimedOrder, copy: WooOrder | null): Promise<Relay
       order.id,
       current.status === "completed"
         ? `This order was changed while it was being sent to the printer, and the printer has already finished its copy (order ${id} in the relay store). Check the printer's dashboard.`
-        : `This order was changed while it was being sent to the printer. Its copy in the relay store (order ${id}) was cancelled, but the printer keeps orders it has already taken. Find order ${id} in the printer's dashboard and cancel it there so it isn't made.`,
+        : `This order was changed while it was being sent to the printer. Its copy in the relay store (order ${id}) was cancelled, which the printer picks up within a few minutes. Check its dashboard only if printing may already have started.`,
     );
   } catch (error) {
     console.error("[relay] Could not take back a copy", error instanceof WooError ? error.code : error);
@@ -551,8 +551,8 @@ export async function withdrawFromRelay(orderNumber: string, reason: WithdrawRea
     if (finished) {
       note = `The printer had already finished this order when it was ${reason}, so it may be on its way. Check the printer's dashboard.`;
     } else if (withPrinter.length > 0) {
-      // Printmood keeps an order it has already taken in, whatever happens to it in the shop afterwards.
-      note = `It was cancelled in the relay store, but the printer keeps orders it has already taken. Open the printer's dashboard, find order ${withPrinter.join(" and ")} and cancel it there (or leave it unconfirmed) so it isn't made.`;
+      // Seen on a live order: Printmood shows the cancellation too, a few minutes later.
+      note = `It was cancelled in the relay store too (order ${withPrinter.join(" and ")}). The printer picks that up within a few minutes. Check its dashboard only if printing may already have started.`;
     } else if (!complete) {
       note = `The relay store has too many orders to be sure no copy of this one is left there. Look for ${orderNumber} in the relay store and cancel it by hand.`;
     }
@@ -587,7 +587,7 @@ export async function pushAddressToRelay(orderNumber: string): Promise<string> {
       if (!HELD.has(copy.status)) withPrinter = true;
     }
     if (!problem) {
-      return withPrinter ? " The relay store has the new address too. Check the printer picked it up." : "";
+      return withPrinter ? " The relay store has the new address too, and the printer picks it up from there." : "";
     }
   } catch (error) {
     console.error("[relay] Could not update an address in the relay store", error instanceof WooError ? error.code : error);

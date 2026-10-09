@@ -133,7 +133,6 @@ only flagged after the third in a row.)
 | This order was changed while it was being sent | It was cancelled or refunded mid-send and its copy was taken back. Check Printmood in case printing had started. |
 | This order was marked cancelled / was deleted in the relay store | It is not being made. Send it again, or refund the customer. |
 | It could NOT be cancelled in the relay store | Cancel it in the shop by hand so it isn't printed. |
-| It was cancelled in the relay store, but the printer keeps orders it has already taken | Open Printmood, find that order and cancel it there (or don't confirm it). |
 
 ## What was checked, and what was not
 
@@ -158,13 +157,10 @@ Not checked, because it needs a Printmood account connected to a real shop:
    turns "processing". The one-copy design leans on this: a copy is made unpaid first
    so that a stray one can be binned unseen. If Printmood takes orders the moment they
    are made, tell the developer before switching on sending by itself.
-3. (Settled, October 9, 2026: Printmood does **not** remove an order when it is
-   cancelled in the shop. It keeps whatever it has already taken in. So after
-   cancelling or refunding an order that has gone to the printer, cancel it in
-   Printmood by hand; the flag on the order says which one. An order Printmood shows as
-   "Need Action" is paused until you confirm it there, so leaving it unconfirmed also
-   stops it.) Whether Printmood takes up a changed address is still to be tested;
-   assume it doesn't.
+3. (Settled on live orders, October 9, 2026: Printmood does follow the shop. An order
+   cancelled here showed as Canceled in Printmood a few minutes later, and a changed
+   address came through. An order Printmood shows as "Need Action" is paused until it
+   is confirmed there.)
 4. Where Printmood writes the tracking number. If it uses a field this code doesn't
    read, shipped orders are flagged "no tracking number came with it" and nothing is
    lost; `src/lib/relay/tracking.ts` then needs that field added.
