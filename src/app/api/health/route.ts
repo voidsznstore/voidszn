@@ -2,7 +2,8 @@ import { sql } from "drizzle-orm";
 import { connection } from "next/server";
 import { getDb } from "@/db";
 import { isCollectingTax } from "@/lib/checkout/tax";
-import { getSquareStatus } from "@/lib/payments/square";
+import { getSetting } from "@/db/queries/settings";
+import { CHECKOUT_NOTE_KEY, type CheckoutNote, getSquareStatus } from "@/lib/payments/square";
 import { getStripeStatus } from "@/lib/payments/stripe";
 import { checkEmail } from "@/lib/email/send";
 import { checkInbox } from "@/lib/mail/gmail";
@@ -15,6 +16,21 @@ import { checkStorage, checkUpload } from "@/lib/storage";
  * shown, and whether email can go out. Returns no secrets and no error
  * details.
  */
+/** The last attempt to open a payment page: which way worked and what Square refused. Codes and field names only. */
+async function lastCheckout(): Promise<string> {
+  try {
+    const raw = await getSetting(getDb(), CHECKOUT_NOTE_KEY);
+    if (!raw) return "none yet";
+    const note = JSON.parse(raw) as CheckoutNote;
+    const refused = (note.refusals ?? [])
+      .map((item) => `${item.shape}: ${item.codes.join(", ") || "refused"}${item.fields.length ? ` at ${item.fields.join(", ")}` : ""}`)
+      .join("; ");
+    return `${note.outcome}${refused ? `; turned down: ${refused}` : ""} (${note.at})`;
+  } catch {
+    return "unknown";
+  }
+}
+
 export async function GET() {
   // Always answer from the live database, never from a prerendered copy.
   await connection();
@@ -56,6 +72,8 @@ export async function GET() {
       ...payments,
       // Whether checkout adds Florida sales tax to orders delivered in Florida.
       salesTax: (await isCollectingTax()) ? "on" : "off",
+      // How the last payment page was opened, and anything Square turned down on the way.
+      lastCheckout: await lastCheckout(),
     });
   } catch {
     return Response.json({ database: "unreachable", ...payments }, { status: 503 });

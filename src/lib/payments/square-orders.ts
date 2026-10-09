@@ -30,8 +30,7 @@ type Reading = { order: PaidOrderInput } | { problem: string };
  * what is missing. The reason never includes customer details, so it is safe to log.
  *
  * `carried` is the delivery address the customer gave on the store's own checkout,
- * when there is one. It is what any sales tax was worked out for, so it is used
- * ahead of anything Square has.
+ * when there is one. It is what any sales tax was worked out for.
  */
 export function readSquareOrder(
   event: EventRef,
@@ -47,16 +46,21 @@ export function readSquareOrder(
   const fulfillment = order.fulfillments?.find((item) => item.shipment_details);
   const recipient = fulfillment?.shipment_details?.recipient;
   const squareAddress = recipient?.address ?? payment.shipping_address;
-  const address = carried
-    ? carried.shippingAddress
-    : {
-        line1: squareAddress?.address_line_1 ?? "",
-        ...(squareAddress?.address_line_2 ? { line2: squareAddress.address_line_2 } : {}),
-        city: squareAddress?.locality ?? "",
-        state: squareAddress?.administrative_district_level_1 ?? "",
-        postalCode: squareAddress?.postal_code ?? "",
-        country: squareAddress?.country ?? "",
-      };
+  // Normally the address is the one taken on our own checkout and Square has none.
+  // If Square's page did ask (the fallback), what the customer left there is the
+  // latest word on where it goes.
+  const fromSquare = Boolean(squareAddress?.address_line_1);
+  const address =
+    carried && !fromSquare
+      ? carried.shippingAddress
+      : {
+          line1: squareAddress?.address_line_1 ?? "",
+          ...(squareAddress?.address_line_2 ? { line2: squareAddress.address_line_2 } : {}),
+          city: squareAddress?.locality ?? "",
+          state: squareAddress?.administrative_district_level_1 ?? "",
+          postalCode: squareAddress?.postal_code ?? "",
+          country: squareAddress?.country ?? "",
+        };
   const email = payment.buyer_email_address ?? recipient?.email_address;
   const total = order.total_money?.amount;
   const paid = payment.amount_money?.amount;
@@ -90,6 +94,7 @@ export function readSquareOrder(
   if (items.length === 0) return { problem: "order has no line items" };
 
   const name =
+    (fromSquare ? recipient?.display_name?.trim() : "") ||
     carried?.shippingName.trim() ||
     recipient?.display_name?.trim() ||
     [squareAddress?.first_name, squareAddress?.last_name].filter(Boolean).join(" ") ||
@@ -107,6 +112,19 @@ export function readSquareOrder(
   const chargedTaxCents = taxCharge?.applied_money?.amount ?? taxCharge?.amount_money?.amount ?? 0;
   const serviceChargesCents = order.total_service_charge_money?.amount ?? 0;
   const taxCents = (order.total_tax_money?.amount ?? 0) + chargedTaxCents;
+  // Tax was worked out for the address given on our checkout. If the customer then
+  // put a different place on Square's page, someone should look at it.
+  const zip = (value: string) => value.trim().slice(0, 5);
+  if (
+    carried &&
+    fromSquare &&
+    (zip(address.postalCode) !== zip(carried.shippingAddress.postalCode) ||
+      address.state.trim().toUpperCase() !== carried.shippingAddress.state)
+  ) {
+    attention.push(
+      `The address was changed on the payment page. Sales tax was worked out for ${carried.shippingAddress.city}, ${carried.shippingAddress.state} ${carried.shippingAddress.postalCode}.`,
+    );
+  }
   if (carried && carried.taxCents !== taxCents) {
     attention.push(
       "The sales tax on this payment isn't what checkout worked out. Compare it with the payment in Square.",
@@ -120,7 +138,7 @@ export function readSquareOrder(
       paymentProvider: "square",
       email,
       customerName: name,
-      phone: carried?.phone ?? recipient?.phone_number ?? null,
+      phone: (fromSquare ? recipient?.phone_number : null) ?? carried?.phone ?? recipient?.phone_number ?? null,
       currency: (order.total_money?.currency ?? "USD").toLowerCase(),
       subtotalCents: items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0),
       discountCents: order.total_discount_money?.amount ?? 0,

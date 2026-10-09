@@ -35,6 +35,8 @@ export class SquareError extends Error {
     readonly status: number,
     /** Square's own error codes, e.g. UNAUTHORIZED. Safe to log and show in the health check. */
     readonly codes: string[],
+    /** Which parts of the request Square objected to, e.g. "checkout_options.shipping_fee". Names only. */
+    readonly fields: string[] = [],
   ) {
     super(`Square request failed (${status}${codes.length ? `: ${codes.join(", ")}` : ""})`);
   }
@@ -65,11 +67,12 @@ async function call<T>(
     signal: AbortSignal.timeout(15_000),
   });
 
-  const data = (await response.json().catch(() => ({}))) as { errors?: { code?: string }[] };
+  const data = (await response.json().catch(() => ({}))) as { errors?: { code?: string; field?: string }[] };
   if (!response.ok) {
     throw new SquareError(
       response.status,
       (data.errors ?? []).map((error) => error.code ?? "UNKNOWN"),
+      (data.errors ?? []).flatMap((error) => (error.field ? [error.field.slice(0, 80)] : [])),
     );
   }
   return data as T;
@@ -99,6 +102,7 @@ const globalForSquare = globalThis as unknown as {
   voidsznSquareAccount?: Cached<SquareAccount>;
   voidsznSquareWebhook?: Cached<string>;
   voidsznSquareWebhookRefreshedAt?: number;
+  voidsznCheckoutShape?: CheckoutShape;
 };
 
 async function findAccount(): Promise<SquareAccount> {
@@ -162,6 +166,22 @@ export type CheckoutLine = {
 /** Marks orders made by this site, so payments taken elsewhere on the same Square account are ignored. */
 export const ORDER_SOURCE = "voidszn-site";
 
+const SHIPPING_NAME = "Standard shipping";
+
+/**
+ * How the payment page is asked for:
+ * - "direct": no address form, shipping as Square's own shipping fee.
+ * - "charges": no address form, shipping as a charge on the order.
+ * - "square-asks": Square's page asks for the address.
+ */
+export type CheckoutShape = "direct" | "charges" | "square-asks";
+/** A way of asking that Square turned down, and which parts it named. No customer details. */
+export type CheckoutRefusal = { shape: CheckoutShape; codes: string[]; fields: string[] };
+
+/** Where the health check finds how the last payment page went. */
+export const CHECKOUT_NOTE_KEY = "checkout.lastStart";
+export type CheckoutNote = { at: string; outcome: string; refusals: CheckoutRefusal[] };
+
 /** Names the sales tax charge on an order, so it can be told apart from shipping when the order is read back. */
 export const TAX_CHARGE_UID = "sales-tax";
 
@@ -181,10 +201,11 @@ export async function createCheckout(input: {
    */
   tax?: { cents: number; name: string } | null;
   /**
-   * False when the store has already taken the delivery address. The payment
-   * page must then not ask for another one, or the tax could be for the wrong place.
+   * The delivery address, when the store has already taken it. The payment page
+   * is then asked not to take another one, or the tax could be for the wrong
+   * place. Left out, Square asks for the address itself.
    */
-  askForAddress: boolean;
+  shipTo?: { line1: string; line2?: string; city: string; state: string; postalCode: string; country: string } | null;
   /** A discount code that has already been checked and priced on the server. */
   discount?: { id: string; code: string; label: string; discountCents: number } | null;
   /** Ticked "email me new designs and offers". Acted on only once they have paid. */
@@ -192,96 +213,155 @@ export async function createCheckout(input: {
   /** Fills in the email on the payment page, so the customer doesn't type it twice. */
   buyerEmail?: string | null;
   redirectUrl: string;
-}): Promise<{ url: string; orderId: string }> {
+}): Promise<{ url: string; orderId: string; shape: CheckoutShape; refusals: CheckoutRefusal[] }> {
   const account = await getAccount();
   const money = (amount: number) => ({ amount, currency: account.currency });
+  const shipTo = input.shipTo ?? null;
 
-  const body = (withWallets: boolean) => ({
-    idempotency_key: randomUUID(),
-    order: {
-      location_id: account.locationId,
-      metadata: {
-        source: ORDER_SOURCE,
-        // Carried on the order so the code is known when the payment comes back. The
-        // id survives the code being renamed in the meantime.
-        ...(input.discount
-          ? { discount_code: input.discount.code, discount_id: input.discount.id }
-          : {}),
-        ...(input.wantsMarketing ? { marketing: "yes" } : {}),
-      },
-      line_items: input.lines.map((line) => ({
-        name: line.name,
-        variation_name: `${line.color} / ${line.size}`,
-        quantity: String(line.quantity),
-        base_price_money: money(line.unitPriceCents),
-        metadata: { slug: line.slug, color: line.color, size: line.size },
-      })),
-      // Taken off the items, never off shipping.
-      ...(input.discount && input.discount.discountCents > 0
-        ? {
-            discounts: [
-              {
-                uid: "code",
-                name: `${input.discount.code} (${input.discount.label})`,
-                amount_money: money(input.discount.discountCents),
-                scope: "ORDER",
-              },
-            ],
-          }
-        : {}),
-      // Added after everything else and not itself taxed.
+  const body = (shape: CheckoutShape, withWallets: boolean) => {
+    // Fixed amounts added to the order under their own names, not themselves taxed.
+    const charges = [
+      ...(shape === "charges" && input.shippingCents > 0
+        ? [
+            {
+              uid: "shipping",
+              name: SHIPPING_NAME,
+              amount_money: money(input.shippingCents),
+              calculation_phase: "SUBTOTAL_PHASE",
+              taxable: false,
+            },
+          ]
+        : []),
       ...(input.tax && input.tax.cents > 0
+        ? [
+            {
+              uid: TAX_CHARGE_UID,
+              name: input.tax.name,
+              amount_money: money(input.tax.cents),
+              calculation_phase: "TOTAL_PHASE",
+              taxable: false,
+            },
+          ]
+        : []),
+    ];
+    const prefill = {
+      ...(input.buyerEmail ? { buyer_email: input.buyerEmail } : {}),
+      // Only when Square is asking for the address anyway: ours, filled in.
+      ...(shape === "square-asks" && shipTo
         ? {
-            service_charges: [
-              {
-                uid: TAX_CHARGE_UID,
-                name: input.tax.name,
-                amount_money: money(input.tax.cents),
-                calculation_phase: "TOTAL_PHASE",
-                taxable: false,
-              },
-            ],
+            buyer_address: {
+              address_line_1: shipTo.line1,
+              ...(shipTo.line2 ? { address_line_2: shipTo.line2 } : {}),
+              locality: shipTo.city,
+              administrative_district_level_1: shipTo.state,
+              postal_code: shipTo.postalCode,
+              country: shipTo.country,
+            },
           }
         : {}),
-    },
-    ...(input.buyerEmail ? { pre_populated_data: { buyer_email: input.buyerEmail } } : {}),
-    checkout_options: {
-      redirect_url: input.redirectUrl,
-      ask_for_shipping_address: input.askForAddress,
-      ...(input.shippingCents > 0
-        ? { shipping_fee: { name: "Standard shipping", charge: money(input.shippingCents) } }
-        : {}),
-      merchant_support_email: siteConfig.supportEmail,
-      allow_tipping: false,
-      enable_coupon: false,
-      enable_loyalty: false,
-      ...(withWallets
-        ? { accepted_payment_methods: { apple_pay: true, google_pay: true, cash_app_pay: true } }
-        : {}),
-    },
-  });
+    };
+    return {
+      idempotency_key: randomUUID(),
+      order: {
+        location_id: account.locationId,
+        metadata: {
+          source: ORDER_SOURCE,
+          // Carried on the order so the code is known when the payment comes back. The
+          // id survives the code being renamed in the meantime.
+          ...(input.discount
+            ? { discount_code: input.discount.code, discount_id: input.discount.id }
+            : {}),
+          ...(input.wantsMarketing ? { marketing: "yes" } : {}),
+        },
+        line_items: input.lines.map((line) => ({
+          name: line.name,
+          variation_name: `${line.color} / ${line.size}`,
+          quantity: String(line.quantity),
+          base_price_money: money(line.unitPriceCents),
+          metadata: { slug: line.slug, color: line.color, size: line.size },
+        })),
+        // Taken off the items, never off shipping.
+        ...(input.discount && input.discount.discountCents > 0
+          ? {
+              discounts: [
+                {
+                  uid: "code",
+                  name: `${input.discount.code} (${input.discount.label})`,
+                  amount_money: money(input.discount.discountCents),
+                  scope: "ORDER",
+                },
+              ],
+            }
+          : {}),
+        ...(charges.length > 0 ? { service_charges: charges } : {}),
+      },
+      ...(Object.keys(prefill).length > 0 ? { pre_populated_data: prefill } : {}),
+      checkout_options: {
+        redirect_url: input.redirectUrl,
+        ask_for_shipping_address: shape === "square-asks",
+        ...(shape !== "charges" && input.shippingCents > 0
+          ? { shipping_fee: { name: SHIPPING_NAME, charge: money(input.shippingCents) } }
+          : {}),
+        merchant_support_email: siteConfig.supportEmail,
+        allow_tipping: false,
+        enable_coupon: false,
+        enable_loyalty: false,
+        ...(withWallets
+          ? { accepted_payment_methods: { apple_pay: true, google_pay: true, cash_app_pay: true } }
+          : {}),
+      },
+    };
+  };
 
   type Created = { payment_link?: { url?: string; order_id?: string } };
-  let created: Created;
-  try {
-    created = await call<Created>(account.environment, "/v2/online-checkout/payment-links", {
-      method: "POST",
-      body: body(true),
-    });
-  } catch (error) {
-    // If the account can't offer a wallet, still let people pay by card.
-    if (!(error instanceof SquareError) || error.status !== 400) throw error;
-    console.error("[square] Payment page with wallets was refused, retrying with cards only", error.codes);
-    created = await call<Created>(account.environment, "/v2/online-checkout/payment-links", {
-      method: "POST",
-      body: body(false),
-    });
+  const create = async (shape: CheckoutShape): Promise<Created> => {
+    try {
+      return await call<Created>(account.environment, "/v2/online-checkout/payment-links", {
+        method: "POST",
+        body: body(shape, true),
+      });
+    } catch (error) {
+      // If the account can't offer a wallet, still let people pay by card.
+      if (!(error instanceof SquareError) || error.status !== 400) throw error;
+      return await call<Created>(account.environment, "/v2/online-checkout/payment-links", {
+        method: "POST",
+        body: body(shape, false),
+      });
+    }
+  };
+
+  // With our own address in hand, the payment page shouldn't ask for one. Square
+  // doesn't say which ways of asking for that it accepts, so they are tried in
+  // order of preference, starting with the one that last worked. The last is the
+  // long-standing one, where Square asks for the address (with ours filled in).
+  const preferred: CheckoutShape[] = shipTo ? ["direct", "charges", "square-asks"] : ["square-asks"];
+  const known = globalForSquare.voidsznCheckoutShape;
+  const shapes = known && preferred.includes(known) ? [known, ...preferred.filter((shape) => shape !== known)] : preferred;
+
+  const refusals: CheckoutRefusal[] = [];
+  let created: Created | null = null;
+  let used: CheckoutShape = shapes[0];
+  let lastError: unknown = null;
+  for (const shape of shapes) {
+    try {
+      created = await create(shape);
+      used = shape;
+      break;
+    } catch (error) {
+      // Anything but "this request is not acceptable" is not a reason to try another way.
+      if (!(error instanceof SquareError) || error.status !== 400) throw error;
+      refusals.push({ shape, codes: error.codes, fields: error.fields });
+      lastError = error;
+      console.error(`[square] Payment page refused (${shape})`, error.codes, error.fields);
+    }
   }
+  if (!created) throw lastError;
+  if (shipTo) globalForSquare.voidsznCheckoutShape = used;
 
   const url = created.payment_link?.url;
   const orderId = created.payment_link?.order_id;
   if (!url || !orderId) throw new Error("Square did not return a payment page.");
-  return { url, orderId };
+  return { url, orderId, shape: used, refusals };
 }
 
 /* ------------------------------------------------------------------ */

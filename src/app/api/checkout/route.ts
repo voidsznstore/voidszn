@@ -1,6 +1,7 @@
 import { getDb, hasDatabase } from "@/db";
 import { saveCart } from "@/db/queries/carts";
 import { saveCheckout } from "@/db/queries/checkouts";
+import { setSetting } from "@/db/queries/settings";
 import { placeProblem } from "@/lib/checkout/address";
 import { type AppliedDiscount, resolveDiscountFor, totalsFor } from "@/lib/checkout/discounts";
 import { priceCart } from "@/lib/checkout/pricing";
@@ -9,7 +10,14 @@ import { type CheckoutTax, isCollectingTax, salesTaxFor } from "@/lib/checkout/t
 import { getAutomation } from "@/lib/email/automation";
 import { isEmailConfigured } from "@/lib/email/send";
 import { ORDER_COOKIE } from "@/lib/checkout/return";
-import { createCheckout, getWebhookKey, isSquareConfigured } from "@/lib/payments/square";
+import {
+  CHECKOUT_NOTE_KEY,
+  type CheckoutNote,
+  SquareError,
+  createCheckout,
+  getWebhookKey,
+  isSquareConfigured,
+} from "@/lib/payments/square";
 import { LIMITS, callerOf, take, tooMany } from "@/lib/rate-limit";
 import { siteConfig } from "@/lib/site-config";
 
@@ -25,6 +33,20 @@ function returnOrigin(request: Request): string {
 }
 
 const fail = (error: string, status: number) => Response.json({ error }, { status });
+
+/**
+ * Writes down how the last attempt to open a payment page went, for the health
+ * check. Shapes, error codes and field names only: never anything about the
+ * customer. Not being able to write it down changes nothing.
+ */
+async function noteStart(note: Omit<CheckoutNote, "at">): Promise<void> {
+  if (!hasDatabase()) return;
+  try {
+    await setSetting(getDb(), CHECKOUT_NOTE_KEY, JSON.stringify({ ...note, at: new Date().toISOString() }));
+  } catch (error) {
+    console.error("[checkout] Could not note how the payment page went", error);
+  }
+}
 
 /**
  * Starts a checkout. Takes the cart (product, color, size, quantity only), an
@@ -93,7 +115,19 @@ export async function POST(request: Request) {
     console.error("[checkout] Webhook is not set up", error);
   }
 
-  let checkout: { url: string; orderId: string };
+  const shipTo =
+    carriesAddress && address
+      ? {
+          line1: address.line1,
+          ...(address.line2 ? { line2: address.line2 } : {}),
+          city: address.city,
+          state: address.state,
+          postalCode: address.postalCode,
+          country: "US",
+        }
+      : null;
+
+  let checkout: Awaited<ReturnType<typeof createCheckout>>;
   try {
     checkout = await createCheckout({
       lines: cart.lines.map((line) => ({
@@ -107,40 +141,39 @@ export async function POST(request: Request) {
       shippingCents: totals.shippingCents,
       discount,
       tax: tax && taxCents > 0 ? { cents: taxCents, name: tax.receiptName } : null,
-      askForAddress: !carriesAddress,
+      shipTo,
       buyerEmail: email,
       wantsMarketing: marketing === true,
       redirectUrl: `${returnOrigin(request)}/order/confirmation`,
     });
   } catch (error) {
     console.error("[checkout] Could not create a payment page", error);
+    await noteStart({
+      outcome: "refused by Square",
+      refusals: error instanceof SquareError ? [{ shape: "square-asks", codes: error.codes, fields: error.fields }] : [],
+    });
     return fail("Checkout could not be started. Please try again.", 502);
   }
 
   // Keep the address for when the payment comes back. Without it the order
   // would have nowhere to go, so failing here stops the checkout.
-  if (carriesAddress && address) {
+  if (shipTo && address) {
     try {
       await saveCheckout(getDb(), {
         paymentOrderRef: checkout.orderId,
         shippingName: address.name,
         phone: address.phone || null,
-        shippingAddress: {
-          line1: address.line1,
-          ...(address.line2 ? { line2: address.line2 } : {}),
-          city: address.city,
-          state: address.state,
-          postalCode: address.postalCode,
-          country: "US",
-        },
+        shippingAddress: shipTo,
         taxCents,
         taxRateBps: tax?.rateBps ?? 0,
       });
     } catch (error) {
       console.error("[checkout] Could not keep the delivery address", error);
+      await noteStart({ outcome: "the address could not be kept", refusals: checkout.refusals });
       return fail("Checkout could not be started. Please try again.", 502);
     }
   }
+  await noteStart({ outcome: `ok (${checkout.shape})`, refusals: checkout.refusals });
 
   // Remember the cart, so a reminder can go out if the payment is never finished.
   // Only while reminders are switched on, which is also when checkout says it will.
