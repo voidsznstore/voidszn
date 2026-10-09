@@ -57,6 +57,13 @@ sales), just in ordered by `products.created_at`.
 - **Orders:** worked by hand for now: mark as sent to the printer, then shipped with
   tracking, then delivered. Every change is written to the order's history with who
   did it.
+- **Orders added by hand** (Orders, "Add order"; `src/db/queries/admin-manual-orders.ts`):
+  for sales agreed outside the site. Items are catalog products (price filled in, can
+  be changed) or custom items typed in. Shipped or pickup. Either already paid, with
+  how it was paid recorded in `orders.payment_provider`, or not paid yet (status
+  `PENDING`, "Not paid" tab) until "Mark as paid". Nothing is charged by the site, so
+  there is no Refund box on these; money goes back the way it came. No sales tax is
+  added. The form carries a token so sending it twice makes one order.
 - **Refunds:** the Refund box on an order sends the money back through Square, in full
   or in part, and counts it in `orders.refunded_cents`. A full refund closes the order.
   Each refund carries a key built from the order, what was already refunded, the

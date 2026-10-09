@@ -18,6 +18,12 @@ import {
   resolveAttention,
   updateShippingAddress,
 } from "@/db/queries/admin-orders";
+import {
+  type ManualOrderInput,
+  PAYMENT_METHODS,
+  createManualOrder,
+  markPaid,
+} from "@/db/queries/admin-manual-orders";
 import { requireAdmin } from "@/lib/admin/session";
 import { sendOrderPlaced, sendOrderRefunded, sendOrderShipped } from "@/lib/email/order-emails";
 import { SquareError, refundPayment } from "@/lib/payments/square";
@@ -236,5 +242,99 @@ export async function noteAction(_previous: OrderActionState, form: FormData) {
     const note = text(1000).min(1).safeParse(form.get("note"));
     if (!note.success) return { error: "Write a note first." };
     await addNote(getDb(), number, actor, note.data);
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Orders added by hand                                                */
+/* ------------------------------------------------------------------ */
+
+const money = z.number().int().min(0).max(10_000_00);
+const quantity = z.number().int().min(1, "Quantities start at 1.").max(999);
+
+const manualOrderSchema = z.object({
+  token: z.string().uuid(),
+  email: z.string().trim().toLowerCase().email("Enter the customer's email address.").max(254),
+  customerName: text(120).min(1, "Enter the customer's name."),
+  phone: text(40),
+  shipTo: z
+    .object({
+      line1: text(200).min(1, "Enter the street address."),
+      line2: text(200),
+      city: text(100).min(1, "Enter the city."),
+      state: text(60).min(1, "Enter the state."),
+      postalCode: text(20).min(1, "Enter the ZIP code."),
+    })
+    .nullable(),
+  items: z
+    .array(
+      z.union([
+        z.object({ variantId: z.string().uuid(), quantity, unitPriceCents: money }),
+        z.object({
+          name: text(120).min(1, "Give every custom item a name."),
+          details: text(60),
+          size: text(20),
+          quantity,
+          unitPriceCents: money,
+        }),
+      ]),
+    )
+    .min(1, "Add at least one item.")
+    .max(50),
+  shippingCents: money,
+  discountCents: money,
+  paidWith: z.enum(PAYMENT_METHODS).nullable(),
+  note: text(1000),
+  notify: z.boolean(),
+});
+
+export type CreateOrderResult = { error: string } | { orderNumber: string; emailNote?: string };
+
+/** Adds an order by hand: one agreed outside the site's own checkout. */
+export async function createOrderAction(input: unknown): Promise<CreateOrderResult> {
+  const admin = await requireAdmin();
+
+  const parsed = manualOrderSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
+  }
+  const { notify, shipTo, ...rest } = parsed.data;
+  const order: ManualOrderInput = {
+    ...rest,
+    shipTo: shipTo
+      ? {
+          line1: shipTo.line1,
+          ...(shipTo.line2 ? { line2: shipTo.line2 } : {}),
+          city: shipTo.city,
+          state: shipTo.state,
+          postalCode: shipTo.postalCode,
+          country: "US",
+        }
+      : null,
+  };
+
+  let result;
+  try {
+    result = await createManualOrder(getDb(), admin.email, order);
+  } catch (error) {
+    if (error instanceof OrderError) return { error: error.message };
+    console.error("[admin] Adding an order failed", error);
+    return { error: "Something went wrong. The order was not added. Try again." };
+  }
+
+  // Only the request that made the order emails, so a repeat can't email twice.
+  if (!result.isNew || !notify) return { orderNumber: result.orderNumber };
+  const email = await sendOrderPlaced(result.orderNumber);
+  return {
+    orderNumber: result.orderNumber,
+    emailNote: email.sent ? undefined : `The customer was not emailed: ${email.reason}`,
+  };
+}
+
+export async function paidAction(_previous: OrderActionState, form: FormData) {
+  return run(form, "Marked as paid.", async (number, actor) => {
+    const method = z.enum(PAYMENT_METHODS).safeParse(form.get("method"));
+    if (!method.success) return { error: "Choose how it was paid." };
+    await markPaid(getDb(), number, actor, method.data);
   });
 }

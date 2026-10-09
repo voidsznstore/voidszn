@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, exists, gte, ilike, inArray, or, sql } from "drizzle-orm";
+import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import type { Database } from "../index";
 import {
   type Address,
@@ -38,6 +39,7 @@ const needsAttention = (db: Database) => {
 
 export const ORDER_VIEWS = {
   all: "All",
+  unpaid: "Not paid",
   "to-fulfil": "To fulfil",
   "in-production": "In production",
   shipped: "Shipped",
@@ -78,6 +80,8 @@ export async function listOrders(db: Database, filters: OrderFilters): Promise<A
 
   const view = (() => {
     switch (filters.view) {
+      case "unpaid":
+        return eq(orders.status, "PENDING");
       case "to-fulfil":
         return and(eq(orders.status, "PAID"), eq(orders.fulfillmentStatus, "UNSUBMITTED"));
       case "in-production":
@@ -146,9 +150,10 @@ export async function listOrders(db: Database, filters: OrderFilters): Promise<A
 
 /** How many orders sit in each view, for the tabs. */
 export async function countOrderViews(db: Database): Promise<Record<OrderView, number>> {
-  const [[all], [toFulfil], [inProduction], [shipped], [attention], [cancelled]] =
+  const [[all], [unpaid], [toFulfil], [inProduction], [shipped], [attention], [cancelled]] =
     await Promise.all([
       db.select({ value: count() }).from(orders),
+      db.select({ value: count() }).from(orders).where(eq(orders.status, "PENDING")),
       db
         .select({ value: count() })
         .from(orders)
@@ -166,6 +171,7 @@ export async function countOrderViews(db: Database): Promise<Record<OrderView, n
     ]);
   return {
     all: all.value,
+    unpaid: unpaid.value,
     "to-fulfil": toFulfil.value,
     "in-production": inProduction.value,
     shipped: shipped.value,
@@ -210,7 +216,7 @@ export type OrderDetail = NonNullable<Awaited<ReturnType<typeof getOrderDetail>>
 /** A problem the person using the admin can fix. Shown to them as written. */
 export class OrderError extends Error {}
 
-type Change = Partial<typeof orders.$inferInsert>;
+type Change = PgUpdateSetSource<typeof orders>;
 
 /**
  * Applies a change to an order and writes it to the order's history, together.
@@ -288,7 +294,7 @@ export const markDelivered = (db: Database, orderNumber: string, actor: string) 
 
 export const cancelOrder = (db: Database, orderNumber: string, actor: string, reason: string) =>
   change(db, orderNumber, actor, {
-    allowed: ["PAID", "IN_PRODUCTION"],
+    allowed: ["PENDING", "PAID", "IN_PRODUCTION"],
     set: { status: "CANCELLED", fulfillmentStatus: "CANCELLED" },
     event: {
       type: "order.cancelled",
@@ -303,8 +309,13 @@ export const updateShippingAddress = (
   shipping: { name: string; address: Address },
 ) =>
   change(db, orderNumber, actor, {
-    allowed: ["PAID", "IN_PRODUCTION"],
-    set: { shippingName: shipping.name, shippingAddress: shipping.address },
+    allowed: ["PENDING", "PAID", "IN_PRODUCTION"],
+    // An order that was down as a pickup is a shipped order once it has an address.
+    set: {
+      shippingName: shipping.name,
+      shippingAddress: shipping.address,
+      shippingMethod: sql`nullif(${orders.shippingMethod}, 'Pickup')`,
+    },
     event: { type: "order.address_updated", message: "Shipping address updated" },
   });
 

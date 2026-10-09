@@ -52,13 +52,13 @@ export type RecordResult =
 // No 0, O, 1 or I, so a number read over the phone can't be misheard.
 const ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
-function newOrderNumber(): string {
+export function newOrderNumber(): string {
   let code = "";
   for (let index = 0; index < 8; index++) code += ALPHABET[randomInt(ALPHABET.length)];
   return `VS-${code}`;
 }
 
-const skuFor = (slug: string, color: string, size: string) =>
+export const skuFor = (slug: string, color: string, size: string) =>
   `${slug}-${color}-${size}`.toUpperCase().replace(/[^A-Z0-9]+/g, "-");
 
 /**

@@ -15,7 +15,8 @@
     "db:smoke": "tsx scripts/db-smoke.ts",
     "test:checkout": "tsx --conditions=react-server scripts/checkout-test.ts",
     "test:storage": "tsx --conditions=react-server scripts/storage-test.ts",
-    "test:totp": "tsx scripts/totp-test.ts"
+    "test:totp": "tsx scripts/totp-test.ts",
+    "test:manual-order": "tsx scripts/manual-order-test.ts"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",

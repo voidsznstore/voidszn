@@ -1,6 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
+import { PICKUP } from "@/db/queries/admin-manual-orders";
 import { customers, orderEvents, orderItems, orders } from "@/db/schema";
 import { type Email, isEmailConfigured, sendEmail } from "./send";
 import {
@@ -79,6 +80,8 @@ export const sendOrderPlaced = (orderNumber: string, options: { again?: boolean 
       totalCents: order.totalCents,
       shippingName: order.shippingName,
       shippingAddress: order.shippingAddress,
+      isPickup: order.shippingMethod === PICKUP,
+      isPaid: order.status !== "PENDING",
     }),
   }));
 

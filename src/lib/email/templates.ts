@@ -110,7 +110,15 @@ export type OrderEmailData = {
   totalCents: number;
   shippingName: string;
   shippingAddress: { line1: string; line2?: string; city: string; state: string; postalCode: string; country: string };
+  /** Collected or handed over, not shipped. */
+  isPickup?: boolean;
+  /** False for an order added by hand that hasn't been paid for yet. */
+  isPaid?: boolean;
 };
+
+/** "Black / M", or whichever of the two an item has. Custom items may have neither. */
+export const optionLabel = (item: { colorName: string; size: string }) =>
+  [item.colorName, item.size].filter(Boolean).join(" / ");
 
 export function orderPlacedEmail(order: OrderEmailData): RenderedEmail {
   const { shipping, orders } = siteConfig;
@@ -121,16 +129,18 @@ export function orderPlacedEmail(order: OrderEmailData): RenderedEmail {
     {
       rows: [
         ...order.items.map((item): [string, string] => [
-          `${item.productName}, ${item.colorName} / ${item.size}${item.quantity > 1 ? ` × ${item.quantity}` : ""}`,
+          `${[item.productName, optionLabel(item)].filter(Boolean).join(", ")}${item.quantity > 1 ? ` × ${item.quantity}` : ""}`,
           formatMoney(item.unitPriceCents * item.quantity),
         ]),
         ...(order.discountCents > 0
           ? [["Discount", `-${formatMoney(order.discountCents)}`] as [string, string]]
           : []),
-        ["Shipping", formatMoney(order.shippingCents)],
+        ...(order.isPickup && order.shippingCents === 0
+          ? []
+          : [["Shipping", formatMoney(order.shippingCents)] as [string, string]]),
         ...(order.taxCents > 0 ? [["Tax", formatMoney(order.taxCents)] as [string, string]] : []),
       ],
-      totalRow: ["Total", formatMoney(order.totalCents)],
+      totalRow: [order.isPaid === false ? "Total due" : "Total", formatMoney(order.totalCents)],
     },
   ];
   if (address.line1) {
@@ -146,7 +156,9 @@ export function orderPlacedEmail(order: OrderEmailData): RenderedEmail {
   }
   blocks.push(
     {
-      p: `Every item is printed to order. Printing and packing takes ${shipping.productionDays} business days, then standard shipping takes ${shipping.transitDays} business days. We'll email you tracking when it ships.`,
+      p: order.isPickup
+        ? `Every item is printed to order. Printing and packing takes ${shipping.productionDays} business days. We'll be in touch when it's ready.`
+        : `Every item is printed to order. Printing and packing takes ${shipping.productionDays} business days, then standard shipping takes ${shipping.transitDays} business days. We'll email you tracking when it ships.`,
     },
     {
       p: `Need to change or cancel? Reply to this email within ${orders.cancelWindow} of ordering. If anything arrives damaged or wrong, tell us within ${orders.issueWindowDays} days and we'll replace or refund it.`,

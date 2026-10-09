@@ -23,7 +23,14 @@ type Props = PageProps<"/admin/orders">;
 export default function OrdersPage({ searchParams }: Props) {
   return (
     <>
-      <PageHeader title="Orders" />
+      <PageHeader
+        title="Orders"
+        action={
+          <Link href="/admin/orders/new" className="btn btn-accent">
+            Add order
+          </Link>
+        }
+      />
       <Suspense fallback={<Loading />}>
         <Orders searchParams={searchParams} />
       </Suspense>

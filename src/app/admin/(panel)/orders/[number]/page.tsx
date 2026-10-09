@@ -6,10 +6,12 @@ import { Suspense } from "react";
 import { OrderActionForm } from "@/components/admin/order-action-form";
 import { Loading } from "@/components/admin/page-header";
 import { getDb } from "@/db";
+import { PAYMENT_METHODS, PICKUP } from "@/db/queries/admin-manual-orders";
 import { type OrderDetail, getOrderDetail } from "@/db/queries/admin-orders";
 import { formatDateTime, statusLabel } from "@/lib/admin/format";
 import { requireAdmin } from "@/lib/admin/session";
 import { isEmailConfigured } from "@/lib/email/send";
+import { optionLabel } from "@/lib/email/templates";
 import { formatMoney } from "@/lib/money";
 import { siteConfig } from "@/lib/site-config";
 import {
@@ -18,6 +20,7 @@ import {
   deliveredAction,
   inProductionAction,
   noteAction,
+  paidAction,
   refundAction,
   resendConfirmationAction,
   resolveAction,
@@ -105,7 +108,12 @@ async function Order({ params }: Pick<Props, "params">) {
   const { order, items, events, attention } = detail;
   const address = order.shippingAddress;
   const hasAddress = Boolean(address.line1);
-  const open = order.status === "PAID" || order.status === "IN_PRODUCTION";
+  const unpaid = order.status === "PENDING";
+  const isPickup = order.shippingMethod === PICKUP && !hasAddress;
+  // Still being worked on: the address can change and the order can be cancelled.
+  const open = unpaid || order.status === "PAID" || order.status === "IN_PRODUCTION";
+  const canShip = order.status === "PAID" || order.status === "IN_PRODUCTION";
+  const viaSquare = order.paymentProvider === "square";
   const shipped = order.status === "SHIPPED" || order.status === "DELIVERED";
   const emailsOn = isEmailConfigured();
   const refundable = order.totalCents - order.refundedCents;
@@ -160,9 +168,9 @@ async function Order({ params }: Pick<Props, "params">) {
                       {item.productName}
                       {item.quantity > 1 ? ` × ${item.quantity}` : ""}
                     </p>
-                    <p className="label text-xs text-smoke">
-                      {item.colorName} / {item.size}
-                    </p>
+                    {optionLabel(item) ? (
+                      <p className="label text-xs text-smoke">{optionLabel(item)}</p>
+                    ) : null}
                     <p className="font-mono text-xs text-smoke">{item.sku}</p>
                   </div>
                   <span className="font-mono text-sm">
@@ -175,7 +183,9 @@ async function Order({ params }: Pick<Props, "params">) {
               {[
                 ["Subtotal", formatMoney(order.subtotalCents)],
                 order.discountCents > 0 ? ["Discount", `-${formatMoney(order.discountCents)}`] : null,
-                ["Shipping", formatMoney(order.shippingCents)],
+                isPickup && order.shippingCents === 0
+                  ? null
+                  : ["Shipping", formatMoney(order.shippingCents)],
                 order.taxCents > 0 ? ["Tax", formatMoney(order.taxCents)] : null,
               ]
                 .filter((row) => row !== null)
@@ -186,7 +196,7 @@ async function Order({ params }: Pick<Props, "params">) {
                   </div>
                 ))}
               <div className="flex justify-between pt-1 text-base font-semibold text-white">
-                <dt>Total paid</dt>
+                <dt>{unpaid ? "Total due" : order.paidAt ? "Total paid" : "Total"}</dt>
                 <dd className="font-mono">{formatMoney(order.totalCents)}</dd>
               </div>
               {order.refundedCents > 0 ? (
@@ -201,6 +211,37 @@ async function Order({ params }: Pick<Props, "params">) {
           {/* Fulfilment */}
           <section className={panel}>
             <h2 className={heading}>Fulfilment</h2>
+
+            {unpaid ? (
+              <>
+                <p className="text-bone-dim">
+                  Waiting for payment of {formatMoney(order.totalCents)}. Mark it as paid when the
+                  money arrives, then it moves to your to-fulfil list.
+                </p>
+                <OrderActionForm
+                  action={paidAction}
+                  orderNumber={order.orderNumber}
+                  submitLabel="Mark as paid"
+                  tone="accent"
+                >
+                  <div className="flex max-w-xs flex-col gap-1.5">
+                    <label htmlFor="field-method" className="text-sm font-semibold">
+                      Paid with
+                    </label>
+                    <select id="field-method" name="method" defaultValue="" required className="input">
+                      <option value="" disabled>
+                        Choose
+                      </option>
+                      {PAYMENT_METHODS.map((method) => (
+                        <option key={method} value={method}>
+                          {method}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </OrderActionForm>
+              </>
+            ) : null}
 
             {order.status === "PAID" ? (
               <>
@@ -260,10 +301,14 @@ async function Order({ params }: Pick<Props, "params">) {
               </div>
             ) : null}
 
-            {open || order.status === "SHIPPED" ? (
+            {canShip || order.status === "SHIPPED" ? (
               <details className="border-t border-line pt-3" open={order.status === "IN_PRODUCTION"}>
                 <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold">
-                  {order.status === "SHIPPED" ? "Change tracking details" : "Mark as shipped"}
+                  {order.status === "SHIPPED"
+                    ? "Change tracking details"
+                    : isPickup
+                      ? "Mark as handed over or shipped"
+                      : "Mark as shipped"}
                 </summary>
                 <div className="pt-2">
                   <OrderActionForm
@@ -279,7 +324,7 @@ async function Order({ params }: Pick<Props, "params">) {
                     <Field label="Tracking link (optional)" name="trackingUrl" defaultValue={order.trackingUrl} placeholder="https://" />
                     {emailsOn ? (
                       <label className="flex min-h-11 items-center gap-3">
-                        <input type="checkbox" name="notify" defaultChecked className="h-5 w-5 accent-[var(--color-accent)]" />
+                        <input type="checkbox" name="notify" defaultChecked={!isPickup} className="h-5 w-5 accent-[var(--color-accent)]" />
                         <span>Email the customer these tracking details</span>
                       </label>
                     ) : null}
@@ -394,13 +439,19 @@ async function Order({ params }: Pick<Props, "params">) {
                 <br />
                 {address.country}
               </address>
+            ) : isPickup ? (
+              <p className="text-bone-dim">
+                {order.shippingName}
+                <br />
+                Pickup or handed over. Nothing to ship.
+              </p>
             ) : (
               <p className="text-accent">No address on this order. Add it before fulfilling.</p>
             )}
             {open ? (
-              <details open={!hasAddress}>
+              <details open={!hasAddress && !isPickup}>
                 <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm underline underline-offset-4">
-                  {hasAddress ? "Change address" : "Add address"}
+                  {hasAddress ? "Change address" : isPickup ? "Ship it instead" : "Add address"}
                 </summary>
                 <div className="pt-2">
                   <OrderActionForm action={addressAction} orderNumber={order.orderNumber} submitLabel="Save address">
@@ -425,16 +476,23 @@ async function Order({ params }: Pick<Props, "params">) {
             <dl className="flex flex-col gap-2 text-sm text-bone-dim">
               <div>
                 <dt className={small}>Paid</dt>
-                <dd>{order.paidAt ? formatDateTime(order.paidAt) : "Not paid"}</dd>
+                <dd>{order.paidAt ? formatDateTime(order.paidAt) : "Not paid yet"}</dd>
               </div>
-              <div>
-                <dt className={small}>Through</dt>
-                <dd className="capitalize">{order.paymentProvider ?? "Unknown"}</dd>
-              </div>
-              <div>
-                <dt className={small}>Payment reference</dt>
-                <dd className="break-all font-mono text-xs">{order.paymentRef ?? "None"}</dd>
-              </div>
+              {order.paymentProvider ? (
+                <div>
+                  <dt className={small}>Through</dt>
+                  <dd className={viaSquare ? "capitalize" : undefined}>
+                    {order.paymentProvider}
+                    {viaSquare ? "" : " (recorded by hand)"}
+                  </dd>
+                </div>
+              ) : null}
+              {order.paymentRef ? (
+                <div>
+                  <dt className={small}>Payment reference</dt>
+                  <dd className="break-all font-mono text-xs">{order.paymentRef}</dd>
+                </div>
+              ) : null}
               {order.refundedCents > 0 ? (
                 <div>
                   <dt className={small}>Refunded so far</dt>
@@ -488,8 +546,11 @@ async function Order({ params }: Pick<Props, "params">) {
             <section className={panel}>
               <h2 className={heading}>Cancel order</h2>
               <p className={small}>
-                To cancel and give the money back, use Refund above: a full refund closes the
-                order by itself. Cancelling here only stops the order and returns no money.
+                {unpaid
+                  ? "Nothing has been paid, so cancelling just closes the order."
+                  : viaSquare
+                    ? "To cancel and give the money back, use Refund above: a full refund closes the order by itself. Cancelling here only stops the order and returns no money."
+                    : "This order wasn't paid through the site, so cancelling here returns no money. Give it back the way it was paid."}
               </p>
               <details>
                 <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm underline underline-offset-4">
