@@ -75,6 +75,23 @@ orders by themselves".
    from this site, change the address on one. Check what Printmood charges and when.
    Only then switch on "Send paid orders by themselves".
 
+## To come back to: less hand work in Printmood
+
+Parked by the owner on October 9, 2026. Each product still has to be matched to a
+Printmood product and given its design by hand, once, in Printmood. Until a product is
+set up, its orders arrive there as "Need Action" at $0.00 and wait. Ideas to pick up:
+
+- One Printmood **product template** per garment type, reused for every product of
+  that type.
+- **Printmood Standards** for the design: front, centred at the top, largest print
+  area, the same on every size and color. Back prints and custom placement stay manual.
+- **Auto Payment** on each product once it has a design. Printmood's guide only says it
+  is off when there is no design yet, so whether it removes the confirm step is to be
+  checked on a real order.
+- On this site: offer Printmood's exact color and size names as presets in the product
+  form, so variants match by name without anyone touching them. Needs the list of
+  blanks the store uses (for example Bella Canvas 3001).
+
 ## What reaches the relay store, and what doesn't
 
 Sent: the customer's name, shipping address and phone number (the printer needs these
