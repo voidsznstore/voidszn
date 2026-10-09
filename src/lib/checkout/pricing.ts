@@ -1,12 +1,14 @@
 import { z } from "zod";
 import { MAX_LINES, MAX_QUANTITY } from "@/lib/cart-limits";
-import { type CatalogProduct, getProductBySlug, getProductType } from "@/lib/catalog";
+import { getDb, hasDatabase } from "@/db";
+import { type Sellable, findSellables } from "@/db/queries/catalog";
+import { sampleCatalog } from "@/lib/catalog/sample";
 import { siteConfig } from "@/lib/site-config";
 
 /**
  * Turns what the browser says is in the cart into what the customer actually owes.
  * The browser sends only product, color, size and quantity. Every price here comes
- * from the catalog on the server.
+ * from the database, read at that moment.
  */
 
 export const cartLinesSchema = z
@@ -25,11 +27,11 @@ export type CartLineInput = z.infer<typeof cartLinesSchema>[number];
 
 export type PricedLine = {
   slug: string;
+  name: string;
   color: string;
   size: string;
   quantity: number;
   unitPriceCents: number;
-  product: CatalogProduct;
   /** Product type slug, e.g. "t-shirts". Drives the shipping rate. */
   typeSlug: string | null;
 };
@@ -42,7 +44,32 @@ export type PricedCart = {
 
 export type PriceResult = { ok: true; cart: PricedCart } | { ok: false; error: string };
 
-export function priceCart(input: CartLineInput[]): PriceResult {
+/** What is on sale right now for these products. Read fresh, never from the cache. */
+async function loadSellables(slugs: string[]): Promise<Sellable[]> {
+  if (hasDatabase()) return findSellables(getDb(), slugs);
+
+  // No database (a fresh local checkout): price from the sample products.
+  return sampleCatalog()
+    .products.filter((product) => slugs.includes(product.slug))
+    .flatMap((product) =>
+      product.colors.flatMap((color) =>
+        product.sizes.map((size) => ({
+          productId: product.slug,
+          variantId: `${product.slug}:${color.name}:${size.size}`,
+          slug: product.slug,
+          name: product.name,
+          color: color.name,
+          size: size.size,
+          sku: `${product.slug}-${color.name}-${size.size}`,
+          priceCents: size.priceCents,
+          typeSlug: product.typeSlug,
+          imageUrl: null,
+        })),
+      ),
+    );
+}
+
+export async function priceCart(input: CartLineInput[]): Promise<PriceResult> {
   // The same product, color and size sent twice is one line.
   const merged = new Map<string, CartLineInput>();
   for (const line of input) {
@@ -51,27 +78,34 @@ export function priceCart(input: CartLineInput[]): PriceResult {
     merged.set(key, existing ? { ...line, quantity: existing.quantity + line.quantity } : line);
   }
 
+  const sellables = await loadSellables([...new Set(input.map((line) => line.slug))]);
+
   const lines: PricedLine[] = [];
   for (const line of merged.values()) {
-    const product = getProductBySlug(line.slug);
-    if (!product) return { ok: false, error: "An item in your cart is no longer available." };
-    if (!product.colors.some((color) => color.name === line.color)) {
-      return { ok: false, error: `${product.name} is no longer available in ${line.color}.` };
+    const ofProduct = sellables.filter((sellable) => sellable.slug === line.slug);
+    if (ofProduct.length === 0) {
+      return { ok: false, error: "An item in your cart is no longer available." };
     }
-    if (!product.sizes.includes(line.size)) {
-      return { ok: false, error: `${product.name} is no longer available in size ${line.size}.` };
+    const name = ofProduct[0].name;
+    const ofColor = ofProduct.filter((sellable) => sellable.color === line.color);
+    if (ofColor.length === 0) {
+      return { ok: false, error: `${name} is no longer available in ${line.color}.` };
+    }
+    const sellable = ofColor.find((candidate) => candidate.size === line.size);
+    if (!sellable) {
+      return { ok: false, error: `${name} is no longer available in size ${line.size}.` };
     }
     if (line.quantity > MAX_QUANTITY) {
       return { ok: false, error: `You can order up to ${MAX_QUANTITY} of each item.` };
     }
     lines.push({
       slug: line.slug,
+      name,
       color: line.color,
       size: line.size,
       quantity: line.quantity,
-      unitPriceCents: product.priceCents,
-      product,
-      typeSlug: getProductType(product)?.slug ?? null,
+      unitPriceCents: sellable.priceCents,
+      typeSlug: sellable.typeSlug,
     });
   }
 

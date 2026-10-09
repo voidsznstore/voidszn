@@ -1,76 +1,93 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { ProductCard } from "@/components/product/product-card";
 import { ProductView } from "@/components/product/product-view";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
-import {
-  getProductBySlug,
-  getProductType,
-  getProducts,
-  getRelatedProducts,
-} from "@/lib/catalog";
+import { getProductBySlug, getProducts, getRelatedProducts } from "@/lib/catalog";
+import { primaryImage } from "@/lib/catalog/shape";
 
-export function generateStaticParams() {
-  return getProducts().map((product) => ({ slug: product.slug }));
+type Props = PageProps<"/products/[slug]">;
+
+/** Used when the store has no products yet. The build needs one address to prepare. */
+const PLACEHOLDER = "coming-soon";
+
+export async function generateStaticParams() {
+  const products = await getProducts();
+  return products.length > 0
+    ? products.map((product) => ({ slug: product.slug }))
+    : [{ slug: PLACEHOLDER }];
 }
 
-export async function generateMetadata({
-  params,
-}: PageProps<"/products/[slug]">): Promise<Metadata> {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const product = getProductBySlug(slug);
-  if (!product) return {};
-  return { title: product.name, description: product.shortDescription };
+  const product = await getProductBySlug(slug);
+  if (!product) return { title: "Not found", robots: { index: false } };
+
+  const image = primaryImage(product);
+  return {
+    title: product.name,
+    description: product.shortDescription || product.description.slice(0, 160),
+    openGraph: image ? { images: [{ url: image.url }] } : undefined,
+  };
 }
 
-export default async function ProductPage({ params }: PageProps<"/products/[slug]">) {
-  const { slug } = await params;
-  const product = getProductBySlug(slug);
-  if (!product) notFound();
-
-  const type = getProductType(product);
-  const related = getRelatedProducts(product.slug);
-
+export default function ProductPage({ params }: Props) {
   return (
     <>
       <SiteHeader />
-
       <main className="mx-auto w-full max-w-site flex-1 px-4 pb-20 sm:px-10">
-        <nav
-          aria-label="Breadcrumb"
-          className="label flex min-h-14 flex-wrap items-center gap-2 text-xs text-smoke"
-        >
-          <Link href="/" className="inline-flex min-h-11 items-center hover:text-bone">
-            Home
-          </Link>
-          <span aria-hidden="true">/</span>
-          <Link
-            href={`/collections/${type?.slug ?? "all"}`}
-            className="inline-flex min-h-11 items-center hover:text-bone"
-          >
-            {type?.name ?? "Shop All"}
-          </Link>
-          <span aria-hidden="true">/</span>
-          <span className="text-bone">{product.name}</span>
-        </nav>
-
-        <ProductView product={product} typeName={type?.name ?? "Shop"} />
-
-        {related.length > 0 ? (
-          <section className="pt-20">
-            <h2 className="display mb-7 text-5xl text-white">You may also like</h2>
-            <div className="grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-3">
-              {related.map((item) => (
-                <ProductCard key={item.slug} product={item} />
-              ))}
-            </div>
-          </section>
-        ) : null}
+        {/* Products added after the last deploy load here on their first visit. */}
+        <Suspense fallback={<div className="min-h-[70vh]" aria-busy="true" />}>
+          <Product params={params} />
+        </Suspense>
       </main>
-
       <SiteFooter />
+    </>
+  );
+}
+
+async function Product({ params }: Pick<Props, "params">) {
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
+  if (!product) notFound();
+
+  const related = await getRelatedProducts(product.slug);
+
+  return (
+    <>
+      <nav
+        aria-label="Breadcrumb"
+        className="label flex min-h-14 flex-wrap items-center gap-2 text-xs text-smoke"
+      >
+        <Link href="/" className="inline-flex min-h-11 items-center hover:text-bone">
+          Home
+        </Link>
+        <span aria-hidden="true">/</span>
+        <Link
+          href={`/collections/${product.typeSlug ?? "all"}`}
+          className="inline-flex min-h-11 items-center hover:text-bone"
+        >
+          {product.typeName ?? "Shop All"}
+        </Link>
+        <span aria-hidden="true">/</span>
+        <span className="text-bone">{product.name}</span>
+      </nav>
+
+      <ProductView product={product} typeName={product.typeName ?? "Shop"} />
+
+      {related.length > 0 ? (
+        <section className="pt-20">
+          <h2 className="display mb-7 text-5xl text-white">You may also like</h2>
+          <div className="grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-3">
+            {related.map((item) => (
+              <ProductCard key={item.slug} product={item} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }

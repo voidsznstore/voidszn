@@ -1,4 +1,4 @@
-import type { Graphic } from "@/lib/catalog";
+import type { Graphic } from "@/lib/catalog/types";
 
 type TeeMockupProps = {
   /** Garment color. */

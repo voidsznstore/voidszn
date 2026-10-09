@@ -2,26 +2,17 @@
 
 import { useSyncExternalStore } from "react";
 import { MAX_QUANTITY } from "./cart-limits";
-import { type CatalogColor, type CatalogProduct, getProductBySlug } from "./catalog";
 
 /**
  * The cart lives in the browser. It stores only what was picked (product, color,
- * size, quantity), never a price. Prices shown in the cart are looked up from the
- * catalog, and checkout recalculates every total on the server.
+ * size, quantity), never a price. Names, pictures and prices shown in the cart
+ * are looked up from the server, and checkout recalculates every total there.
  */
 export type CartLine = {
   slug: string;
   color: string;
   size: string;
   quantity: number;
-};
-
-/** A cart line joined with its product, ready to display. */
-export type CartItem = CartLine & {
-  key: string;
-  product: CatalogProduct;
-  colorOption: CatalogColor;
-  lineTotalCents: number;
 };
 
 export { MAX_QUANTITY };
@@ -132,22 +123,12 @@ export function getCartLines(): CartLine[] {
   return lines;
 }
 
-/** Joins the stored lines with the catalog and drops anything no longer sold. */
-function toItems(stored: CartLine[]): CartItem[] {
-  return stored.flatMap((line) => {
-    const product = getProductBySlug(line.slug);
-    const colorOption = product?.colors.find((color) => color.name === line.color);
-    if (!product || !colorOption || !product.sizes.includes(line.size)) return [];
-    return [
-      {
-        ...line,
-        key: lineKey(line),
-        product,
-        colorOption,
-        lineTotalCents: product.priceCents * line.quantity,
-      },
-    ];
-  });
+/** Drops lines the server says can't be bought any more. */
+export function removeUnavailable(keys: string[]) {
+  if (keys.length === 0) return;
+  const gone = new Set(keys);
+  const next = lines.filter((item) => !gone.has(lineKey(item)));
+  if (next.length !== lines.length) commit(next);
 }
 
 export function useCart() {
@@ -158,11 +139,9 @@ export function useCart() {
     () => lines,
     () => EMPTY,
   );
-  const items = toItems(stored);
 
   return {
-    items,
-    count: items.reduce((total, item) => total + item.quantity, 0),
-    subtotalCents: items.reduce((total, item) => total + item.lineTotalCents, 0),
+    lines: stored,
+    count: stored.reduce((total, line) => total + line.quantity, 0),
   };
 }

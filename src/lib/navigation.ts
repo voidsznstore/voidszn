@@ -1,8 +1,6 @@
-import { getCategories } from "./catalog";
-
 export type NavLink = { label: string; href: string };
 
-const collectionLink = (label: string, slug: string): NavLink => ({
+export const collectionLink = (label: string, slug: string): NavLink => ({
   label,
   href: `/collections/${slug}`,
 });
@@ -12,17 +10,6 @@ export const headerLinks: NavLink[] = [
   collectionLink("Best Sellers", "best-sellers"),
   collectionLink("Just In", "just-in"),
 ];
-
-export const shopLinks: NavLink[] = [
-  collectionLink("Best Sellers", "best-sellers"),
-  collectionLink("Just In", "just-in"),
-  ...getCategories("PRODUCT_TYPE").map((category) => collectionLink(category.name, category.slug)),
-  collectionLink("Shop All", "all"),
-];
-
-export const interestLinks: NavLink[] = getCategories("INTEREST").map((category) =>
-  collectionLink(category.name, category.slug),
-);
 
 export const helpLinks: NavLink[] = [
   { label: "FAQ", href: "/faq" },

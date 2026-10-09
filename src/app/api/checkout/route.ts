@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   const parsed = cartLinesSchema.safeParse((body as { lines?: unknown } | null)?.lines);
   if (!parsed.success) return fail("The cart could not be read.", 400);
 
-  const priced = priceCart(parsed.data);
+  const priced = await priceCart(parsed.data);
   if (!priced.ok) return fail(priced.error, 409);
   const { cart } = priced;
 
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
   try {
     const checkout = await createCheckout({
       lines: cart.lines.map((line) => ({
-        name: line.product.name,
+        name: line.name,
         slug: line.slug,
         color: line.color,
         size: line.size,

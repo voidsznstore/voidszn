@@ -15,53 +15,57 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../src/db";
 import { recordPaidOrder } from "../src/db/queries/orders";
 import { customers, orderItems, orders, webhookEvents } from "../src/db/schema";
-import { getProducts } from "../src/lib/catalog";
+import { sampleCatalog } from "../src/lib/catalog/sample";
 import { cartLinesSchema, priceCart, shippingFor } from "../src/lib/checkout/pricing";
 import { ORDER_SOURCE, type SquareOrder, type SquarePayment } from "../src/lib/payments/square";
 import { orderFromSquare } from "../src/lib/payments/square-orders";
 import { siteConfig } from "../src/lib/site-config";
 
 let passed = 0;
-function check(label: string, run: () => void) {
-  run();
-  passed += 1;
-  console.log(`  ok  ${label}`);
+const checks: { label: string; run: () => void | Promise<void> }[] = [];
+/** Queues a check. They run in order once the file has been read. */
+function check(label: string, run: () => void | Promise<void>) {
+  checks.push({ label, run });
+}
+function section(title: string) {
+  checks.push({ label: `§${title}`, run: () => {} });
 }
 
-const [tee] = getProducts();
+// The sample products are also what the test database is seeded with.
+const [tee] = sampleCatalog().products;
 const line = (overrides: Partial<{ slug: string; color: string; size: string; quantity: number }> = {}) => ({
   slug: tee.slug,
   color: tee.colors[0].name,
-  size: tee.sizes[0],
+  size: tee.sizes[0].size,
   quantity: 1,
   ...overrides,
 });
 
-console.log("Pricing");
+section("Pricing");
 
-check("prices come from the catalog", () => {
-  const result = priceCart([line({ quantity: 2 })]);
+check("prices come from the catalog", async () => {
+  const result = await priceCart([line({ quantity: 2 })]);
   assert.ok(result.ok);
   assert.equal(result.cart.subtotalCents, tee.priceCents * 2);
   assert.equal(result.cart.lines[0].unitPriceCents, tee.priceCents);
 });
 
-check("the same item sent twice is merged", () => {
-  const result = priceCart([line(), line({ quantity: 3 })]);
+check("the same item sent twice is merged", async () => {
+  const result = await priceCart([line(), line({ quantity: 3 })]);
   assert.ok(result.ok);
   assert.equal(result.cart.lines.length, 1);
   assert.equal(result.cart.lines[0].quantity, 4);
 });
 
-check("merging can't be used to pass the quantity limit", () => {
-  const result = priceCart([line({ quantity: 10 }), line({ quantity: 10 })]);
+check("merging can't be used to pass the quantity limit", async () => {
+  const result = await priceCart([line({ quantity: 10 }), line({ quantity: 10 })]);
   assert.equal(result.ok, false);
 });
 
-check("unknown product, color and size are refused", () => {
-  assert.equal(priceCart([line({ slug: "not-a-product" })]).ok, false);
-  assert.equal(priceCart([line({ color: "Neon" })]).ok, false);
-  assert.equal(priceCart([line({ size: "6XL" })]).ok, false);
+check("unknown product, color and size are refused", async () => {
+  assert.equal((await priceCart([line({ slug: "not-a-product" })])).ok, false);
+  assert.equal((await priceCart([line({ color: "Neon" })])).ok, false);
+  assert.equal((await priceCart([line({ size: "6XL" })])).ok, false);
 });
 
 check("the request shape is strict", () => {
@@ -97,7 +101,7 @@ check("shipping: an unknown product type uses the fallback rate", () => {
   assert.equal(shippingFor([]), 0);
 });
 
-console.log("Reading a Square payment");
+section("Reading a Square payment");
 
 const order: SquareOrder = {
   id: "ORDERcheckouttest1",
@@ -254,7 +258,20 @@ async function orderChecks() {
   }
 }
 
-orderChecks()
+async function main() {
+  for (const { label, run } of checks) {
+    if (label.startsWith("§")) {
+      console.log(label.slice(1));
+      continue;
+    }
+    await run();
+    passed += 1;
+    console.log(`  ok  ${label}`);
+  }
+  await orderChecks();
+}
+
+main()
   .then(() => {
     console.log(`\n${passed} checks passed`);
     process.exit(0);

@@ -7,6 +7,11 @@ export type Database = NodePgDatabase<typeof schema>;
 // Reuse one pool across hot reloads and warm serverless invocations.
 const globalForDb = globalThis as unknown as { voidsznPool?: Pool; voidsznDb?: Database };
 
+/** Whether a database is configured at all. False on a fresh local checkout. */
+export function hasDatabase(): boolean {
+  return Boolean(process.env.DATABASE_URL ?? process.env.POSTGRES_URL);
+}
+
 /**
  * Returns the database client. Created on first use so builds and pages that
  * never touch the database do not need DATABASE_URL.

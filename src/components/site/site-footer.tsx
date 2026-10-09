@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { helpLinks, interestLinks, legalLinks, type NavLink, shopLinks } from "@/lib/navigation";
+import { getCategories } from "@/lib/catalog";
+import { collectionLink, helpLinks, legalLinks, type NavLink } from "@/lib/navigation";
 import { siteConfig } from "@/lib/site-config";
 
 function FooterColumn({ title, links }: { title: string; links: NavLink[] }) {
@@ -22,12 +23,28 @@ function FooterColumn({ title, links }: { title: string; links: NavLink[] }) {
   );
 }
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const categories = await getCategories();
+  const linksFor = (kind: "PRODUCT_TYPE" | "INTEREST") =>
+    categories
+      .filter((category) => category.kind === kind)
+      .map((category) => collectionLink(category.name, category.slug));
+
+  const shopLinks = [
+    collectionLink("Best Sellers", "best-sellers"),
+    collectionLink("Just In", "just-in"),
+    ...linksFor("PRODUCT_TYPE"),
+    collectionLink("Shop All", "all"),
+  ];
+  const interestLinks = linksFor("INTEREST");
+
   return (
     <footer className="border-t border-line">
       <div className="mx-auto grid max-w-site grid-cols-2 gap-x-6 gap-y-10 px-4 py-14 sm:px-10 lg:grid-cols-4">
         <FooterColumn title="Shop" links={shopLinks} />
-        <FooterColumn title="Shop by interest" links={interestLinks} />
+        {interestLinks.length > 0 ? (
+          <FooterColumn title="Shop by interest" links={interestLinks} />
+        ) : null}
         <FooterColumn title="Help" links={helpLinks} />
         <FooterColumn title="Legal" links={legalLinks} />
       </div>

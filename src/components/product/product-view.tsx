@@ -1,19 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useCartUi } from "@/components/cart/cart-provider";
 import { addToCart } from "@/lib/cart-store";
-import type { CatalogProduct } from "@/lib/catalog";
-import Link from "next/link";
+import { imagesFor } from "@/lib/catalog/shape";
+import type { CatalogProduct } from "@/lib/catalog/types";
 import { formatMoney } from "@/lib/money";
 import { siteConfig } from "@/lib/site-config";
-import { TeeMockup } from "./tee-mockup";
+import { ProductArt } from "./product-art";
 
 type View = "front" | "back";
 const VIEWS: View[] = ["front", "back"];
 
 const { shipping, orders } = siteConfig;
 const SHIPPING_NOTE = `Made for you after you order, usually within ${shipping.productionDays} business days. Standard shipping then takes ${shipping.transitDays} business days, with tracking sent by email.`;
+
+const MAIN_SIZES = "(min-width: 1024px) 45vw, 100vw";
+const THUMB_SIZES = "(min-width: 1024px) 11vw, 25vw";
 
 type ProductViewProps = {
   product: CatalogProduct;
@@ -24,11 +28,20 @@ type ProductViewProps = {
 export function ProductView({ product, typeName }: ProductViewProps) {
   const [colorIndex, setColorIndex] = useState(0);
   const [size, setSize] = useState<string | null>(null);
-  const [view, setView] = useState<View>("front");
+  // Which picture is showing: a photo number, or front/back of the stand-in drawing.
+  const [shot, setShot] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const { openCart } = useCartUi();
 
   const color = product.colors[colorIndex];
+  const photos = imagesFor(product, color);
+  const hasPhotos = photos.length > 0;
+  const shotCount = hasPhotos ? photos.length : VIEWS.length;
+  const current = Math.min(shot, shotCount - 1);
+
+  const chosenSize = product.sizes.find((option) => option.size === size);
+  const sizePricingVaries = product.sizes.some((option) => option.priceCents !== product.priceCents);
+  const priceCents = chosenSize?.priceCents ?? product.priceCents;
 
   function handleAddToCart() {
     if (!size) {
@@ -44,39 +57,44 @@ export function ProductView({ product, typeName }: ProductViewProps) {
     <div className="grid items-start gap-x-14 gap-y-10 lg:grid-cols-[1.1fr_0.9fr]">
       {/* Gallery */}
       <div className="flex flex-col gap-3">
-        <div className="flex aspect-[4/5] items-center justify-center bg-well p-10 sm:p-16">
-          <TeeMockup
-            color={color.hex}
-            ink={color.ink}
+        <div className="relative aspect-[4/5] overflow-hidden bg-well">
+          <ProductArt
+            image={hasPhotos ? photos[current] : null}
+            label={`${product.name} in ${color.name}${hasPhotos ? "" : `, ${VIEWS[current]}`}`}
+            color={color}
             graphic={product.graphic}
-            view={view}
-            label={`${product.name} in ${color.name}, ${view}`}
-            className="h-full w-full"
+            view={hasPhotos ? undefined : VIEWS[current]}
+            sizes={MAIN_SIZES}
+            padding="p-10 sm:p-16"
+            priority
           />
         </div>
-        <div className="grid grid-cols-4 gap-3">
-          {VIEWS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-label={`Show ${option}`}
-              aria-pressed={view === option}
-              onClick={() => setView(option)}
-              className={`flex aspect-square items-center justify-center bg-well p-3 ${
-                view === option ? "outline outline-1 outline-bone" : "hover:bg-well-hover"
-              }`}
-            >
-              <TeeMockup
-                color={color.hex}
-                ink={color.ink}
-                graphic={product.graphic}
-                view={option}
-                label=""
-                className="h-full w-full"
-              />
-            </button>
-          ))}
-        </div>
+        {shotCount > 1 ? (
+          <div className="grid grid-cols-4 gap-3">
+            {Array.from({ length: shotCount }, (_, index) => (
+              <button
+                key={hasPhotos ? photos[index].url : VIEWS[index]}
+                type="button"
+                aria-label={hasPhotos ? `Show photo ${index + 1}` : `Show ${VIEWS[index]}`}
+                aria-pressed={current === index}
+                onClick={() => setShot(index)}
+                className={`relative aspect-square overflow-hidden bg-well ${
+                  current === index ? "outline outline-1 outline-bone" : "hover:bg-well-hover"
+                }`}
+              >
+                <ProductArt
+                  image={hasPhotos ? photos[index] : null}
+                  label=""
+                  color={color}
+                  graphic={product.graphic}
+                  view={hasPhotos ? undefined : VIEWS[index]}
+                  sizes={THUMB_SIZES}
+                  padding="p-3"
+                />
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {/* Details */}
@@ -84,8 +102,11 @@ export function ProductView({ product, typeName }: ProductViewProps) {
         <div className="flex flex-col gap-3">
           <p className="label text-accent">{typeName}</p>
           <h1 className="display text-[clamp(2.5rem,5vw,3.75rem)] text-white">{product.name}</h1>
-          <p className="font-mono text-2xl text-white">{formatMoney(product.priceCents)}</p>
-          <p className="text-bone-dim">{product.description}</p>
+          <p className="font-mono text-2xl text-white">
+            {sizePricingVaries && !chosenSize ? "From " : ""}
+            {formatMoney(priceCents)}
+          </p>
+          {product.description ? <p className="text-bone-dim">{product.description}</p> : null}
         </div>
 
         <fieldset className="flex flex-col gap-3">
@@ -99,7 +120,10 @@ export function ProductView({ product, typeName }: ProductViewProps) {
                 type="button"
                 aria-label={option.name}
                 aria-pressed={index === colorIndex}
-                onClick={() => setColorIndex(index)}
+                onClick={() => {
+                  setColorIndex(index);
+                  setShot(0);
+                }}
                 className="h-11 w-11 rounded-full"
                 style={{
                   background: option.hex,
@@ -120,20 +144,20 @@ export function ProductView({ product, typeName }: ProductViewProps) {
           <div className="flex flex-wrap gap-2">
             {product.sizes.map((option) => (
               <button
-                key={option}
+                key={option.size}
                 type="button"
-                aria-pressed={size === option}
+                aria-pressed={size === option.size}
                 onClick={() => {
-                  setSize(option);
+                  setSize(option.size);
                   setMessage(null);
                 }}
                 className={`min-h-12 min-w-[3.75rem] border px-3 font-mono text-sm transition-colors ${
-                  size === option
+                  size === option.size
                     ? "border-bone bg-bone text-void"
                     : "border-line-strong text-bone hover:border-bone"
                 }`}
               >
-                {option}
+                {option.size}
               </button>
             ))}
           </div>
@@ -142,9 +166,9 @@ export function ProductView({ product, typeName }: ProductViewProps) {
               Size guide
             </summary>
             <p className="pb-2 text-bone-dim">
-              Sample product. Chest and length measurements for each size go here. See{" "}
+              Not sure which size? See the{" "}
               <Link href="/size-guide" className="underline underline-offset-4">
-                how to measure
+                size guide and how to measure
               </Link>
               .
             </p>
@@ -170,22 +194,26 @@ export function ProductView({ product, typeName }: ProductViewProps) {
         </div>
 
         <div className="border-t border-line">
-          <details open className="border-b border-line">
-            <summary className="flex min-h-[3.25rem] cursor-pointer items-center font-semibold">
-              Details
-            </summary>
-            <ul className="list-disc pb-4 pl-5 text-[0.9375rem] text-bone-dim">
-              {product.details.map((detail) => (
-                <li key={detail}>{detail}</li>
-              ))}
-            </ul>
-          </details>
-          <details className="border-b border-line">
-            <summary className="flex min-h-[3.25rem] cursor-pointer items-center font-semibold">
-              Size and fit
-            </summary>
-            <p className="pb-4 text-[0.9375rem] text-bone-dim">{product.fit}</p>
-          </details>
+          {product.details.length > 0 ? (
+            <details open className="border-b border-line">
+              <summary className="flex min-h-[3.25rem] cursor-pointer items-center font-semibold">
+                Details
+              </summary>
+              <ul className="list-disc pb-4 pl-5 text-[0.9375rem] text-bone-dim">
+                {product.details.map((detail) => (
+                  <li key={detail}>{detail}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+          {product.fit ? (
+            <details className="border-b border-line">
+              <summary className="flex min-h-[3.25rem] cursor-pointer items-center font-semibold">
+                Size and fit
+              </summary>
+              <p className="pb-4 text-[0.9375rem] text-bone-dim">{product.fit}</p>
+            </details>
+          ) : null}
           <details className="border-b border-line">
             <summary className="flex min-h-[3.25rem] cursor-pointer items-center font-semibold">
               Shipping and returns

@@ -1,19 +1,25 @@
 import Link from "next/link";
 import { ProductCard } from "@/components/product/product-card";
-import { TeeMockup } from "@/components/product/tee-mockup";
+import { ProductArt } from "@/components/product/product-art";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
 import { getCategories, getCollectionProducts, getProducts } from "@/lib/catalog";
+import { primaryImage } from "@/lib/catalog/shape";
 
 const PROMISES = ["Printed to order", "Tracked shipping", "Secure checkout"];
 
-export default function HomePage() {
-  const products = getProducts();
+export default async function HomePage() {
+  const [products, justInAll, productTypes, interests] = await Promise.all([
+    getProducts(),
+    getCollectionProducts("just-in"),
+    getCategories("PRODUCT_TYPE"),
+    getCategories("INTEREST"),
+  ]);
+  const justIn = justInAll.slice(0, 4);
+  // The first product in the store's order leads the page. With nothing on sale
+  // yet, the hero stands alone.
   const featured = products[0];
-  const featuredColor = featured.colors[0];
-  const justIn = getCollectionProducts("just-in").slice(0, 4);
-  const productTypes = getCategories("PRODUCT_TYPE");
-  const interests = getCategories("INTEREST");
+  const featuredColor = featured?.colors[0];
 
   return (
     <>
@@ -41,19 +47,23 @@ export default function HomePage() {
               </div>
             </div>
 
-            <Link
-              href={`/products/${featured.slug}`}
-              aria-label={featured.name}
-              className="mx-auto flex aspect-[4/5] w-full max-w-md items-center justify-center bg-well p-10 transition-colors hover:bg-well-hover"
-            >
-              <TeeMockup
-                color={featuredColor.hex}
-                ink={featuredColor.ink}
-                graphic={featured.graphic}
-                label={`${featured.name} in ${featuredColor.name}`}
-                className="h-full w-full"
-              />
-            </Link>
+            {featured && featuredColor ? (
+              <Link
+                href={`/products/${featured.slug}`}
+                aria-label={featured.name}
+                className="relative mx-auto block aspect-[4/5] w-full max-w-md overflow-hidden bg-well transition-colors hover:bg-well-hover"
+              >
+                <ProductArt
+                  image={primaryImage(featured)}
+                  label={`${featured.name} in ${featuredColor.name}`}
+                  color={featuredColor}
+                  graphic={featured.graphic}
+                  sizes="(min-width: 1024px) 28rem, 90vw"
+                  padding="p-10"
+                  priority
+                />
+              </Link>
+            ) : null}
           </div>
         </section>
 
@@ -68,22 +78,24 @@ export default function HomePage() {
           </ul>
         </div>
 
-        <section className="mx-auto max-w-site px-4 pt-20 sm:px-10">
-          <div className="mb-7 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-            <h2 className="display text-5xl text-white">Just in</h2>
-            <Link
-              href="/collections/just-in"
-              className="inline-flex min-h-11 items-center text-sm font-semibold underline underline-offset-4 hover:text-white"
-            >
-              View all
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-4">
-            {justIn.map((product) => (
-              <ProductCard key={product.slug} product={product} />
-            ))}
-          </div>
-        </section>
+        {justIn.length > 0 ? (
+          <section className="mx-auto max-w-site px-4 pt-20 sm:px-10">
+            <div className="mb-7 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+              <h2 className="display text-5xl text-white">Just in</h2>
+              <Link
+                href="/collections/just-in"
+                className="inline-flex min-h-11 items-center text-sm font-semibold underline underline-offset-4 hover:text-white"
+              >
+                View all
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-4">
+              {justIn.map((product) => (
+                <ProductCard key={product.slug} product={product} />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="mx-auto max-w-site px-4 pt-20 sm:px-10">
           <h2 className="display mb-7 text-5xl text-white">Shop by category</h2>
@@ -101,21 +113,25 @@ export default function HomePage() {
           </ul>
         </section>
 
-        <section className="mx-auto max-w-site px-4 py-20 sm:px-10">
-          <h2 className="display mb-7 text-5xl text-white">Shop by interest</h2>
-          <ul className="flex flex-wrap gap-3">
-            {interests.map((category) => (
-              <li key={category.slug}>
-                <Link
-                  href={`/collections/${category.slug}`}
-                  className="inline-flex min-h-12 items-center border border-line-strong px-5 text-sm font-semibold uppercase tracking-[0.06em] transition-colors hover:border-bone hover:bg-bone hover:text-void"
-                >
-                  {category.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {interests.length > 0 ? (
+          <section className="mx-auto max-w-site px-4 py-20 sm:px-10">
+            <h2 className="display mb-7 text-5xl text-white">Shop by interest</h2>
+            <ul className="flex flex-wrap gap-3">
+              {interests.map((category) => (
+                <li key={category.slug}>
+                  <Link
+                    href={`/collections/${category.slug}`}
+                    className="inline-flex min-h-12 items-center border border-line-strong px-5 text-sm font-semibold uppercase tracking-[0.06em] transition-colors hover:border-bone hover:bg-bone hover:text-void"
+                  >
+                    {category.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <div className="pb-20" />
+        )}
       </main>
 
       <SiteFooter />

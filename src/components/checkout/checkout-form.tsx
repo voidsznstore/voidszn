@@ -28,15 +28,15 @@ const FALLBACK_ERROR = "Checkout could not be started. Please try again.";
  */
 export function CheckoutForm() {
   const hydrated = useHydrated();
-  const { items } = useCart();
+  const { lines: cart } = useCart();
   const [checkout, setCheckout] = useState<Checkout>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
 
   // Changes whenever the cart does, so the payment page always matches the cart.
   const signature = JSON.stringify(
-    items.map((item) => [item.slug, item.color, item.size, item.quantity]),
+    cart.map((line) => [line.slug, line.color, line.size, line.quantity]),
   );
-  const isEmpty = items.length === 0;
+  const isEmpty = cart.length === 0;
 
   useEffect(() => {
     if (!hydrated || isEmpty) return;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { CatalogProduct } from "@/lib/catalog";
+import type { CatalogProduct } from "@/lib/catalog/types";
 import { ProductCard } from "./product-card";
 
 const SORTS = {
@@ -17,7 +17,7 @@ function sortProducts(products: CatalogProduct[], sort: Sort): CatalogProduct[] 
   const sorted = [...products];
   switch (sort) {
     case "newest":
-      return sorted.sort((a, b) => b.addedOrder - a.addedOrder);
+      return sorted.sort((a, b) => b.createdAt - a.createdAt);
     case "price-asc":
       return sorted.sort((a, b) => a.priceCents - b.priceCents);
     case "price-desc":

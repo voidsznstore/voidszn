@@ -37,6 +37,11 @@ export type PaidOrderInput = {
     size: string;
     quantity: number;
     unitPriceCents: number;
+    /** Links back to the catalog, when the product still exists. */
+    productId?: string | null;
+    variantId?: string | null;
+    sku?: string | null;
+    imageUrl?: string | null;
   }[];
 };
 
@@ -144,7 +149,10 @@ export async function recordPaidOrder(db: Database, input: PaidOrderInput): Prom
         productName: item.productName,
         colorName: item.colorName,
         size: item.size,
-        sku: skuFor(item.slug, item.colorName, item.size),
+        productId: item.productId ?? null,
+        variantId: item.variantId ?? null,
+        sku: item.sku ?? skuFor(item.slug, item.colorName, item.size),
+        imageUrl: item.imageUrl ?? null,
         unitPriceCents: item.unitPriceCents,
         quantity: item.quantity,
       })),

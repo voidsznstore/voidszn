@@ -1,5 +1,6 @@
 import "server-only";
 import { getDb } from "@/db";
+import { findSellables } from "@/db/queries/catalog";
 import {
   type PaidOrderInput,
   findOrderNumberByPaymentRef,
@@ -152,6 +153,27 @@ export async function settlePayment(paymentId: string, event: EventRef): Promise
     return { status: "not_ours" };
   }
   const input = reading.order;
+
+  // Tie each line back to the catalog, so sales can be reported by product and
+  // category. The order keeps its own copy of names and prices either way.
+  try {
+    const sellables = await findSellables(db, [...new Set(input.items.map((item) => item.slug))]);
+    for (const item of input.items) {
+      const match = sellables.find(
+        (sellable) =>
+          sellable.slug === item.slug &&
+          sellable.color === item.colorName &&
+          sellable.size === item.size,
+      );
+      if (!match) continue;
+      item.productId = match.productId;
+      item.variantId = match.variantId;
+      item.sku = match.sku;
+      item.imageUrl = match.imageUrl;
+    }
+  } catch (error) {
+    console.error("[square] Could not link order lines to the catalog", error);
+  }
 
   const result = await recordPaidOrder(db, input);
   const orderNumber =
