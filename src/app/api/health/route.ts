@@ -21,7 +21,14 @@ export async function GET() {
     checkUpload(),
     checkEmail(),
   ]);
-  const payments = { ...square, images, upload, email };
+  const payments = {
+    ...square,
+    images,
+    upload,
+    email: email.status,
+    // DNS records are public by nature, so listing the ones still needed gives nothing away.
+    ...(email.dns ? { emailDns: email.dns } : {}),
+  };
 
   const configured = Boolean(process.env.DATABASE_URL ?? process.env.POSTGRES_URL);
   if (!configured) {

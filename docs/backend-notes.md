@@ -113,4 +113,6 @@ Payments run on Square. All Square code is in `src/lib/payments/`.
 - Shipping is charged at the printer's rate (`siteConfig.shipping.rates`).
 - `/api/health` reports the payment setup without exposing anything secret. It also
   saves a tiny test image and loads it back from the public image address (`upload`),
-  and says whether email can go out (`email`).
+  and says whether email can go out (`email`). Once `RESEND_API_KEY` is set it adds
+  the store's domain to Resend by itself and lists the DNS records still needed
+  (`emailDns`) until Resend has verified them.
