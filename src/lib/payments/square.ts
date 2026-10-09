@@ -102,7 +102,6 @@ const globalForSquare = globalThis as unknown as {
   voidsznSquareAccount?: Cached<SquareAccount>;
   voidsznSquareWebhook?: Cached<string>;
   voidsznSquareWebhookRefreshedAt?: number;
-  voidsznCheckoutShape?: CheckoutShape;
 };
 
 async function findAccount(): Promise<SquareAccount> {
@@ -170,11 +169,15 @@ const SHIPPING_NAME = "Standard shipping";
 
 /**
  * How the payment page is asked for:
- * - "direct": no address form, shipping as Square's own shipping fee.
  * - "charges": no address form, shipping as a charge on the order.
- * - "square-asks": Square's page asks for the address.
+ * - "square-asks": Square's page asks for the address, and shipping is Square's
+ *   own shipping fee.
+ *
+ * There is no third way. Square refuses its own shipping fee on a page with no
+ * address form (INVALID_VALUE at ask_for_shipping_address; seen on the sandbox,
+ * October 9, 2026), which is why shipping goes on the order as a charge.
  */
-export type CheckoutShape = "direct" | "charges" | "square-asks";
+export type CheckoutShape = "charges" | "square-asks";
 /** A way of asking that Square turned down, and which parts it named. No customer details. */
 export type CheckoutRefusal = { shape: CheckoutShape; codes: string[]; fields: string[] };
 
@@ -330,13 +333,10 @@ export async function createCheckout(input: {
     }
   };
 
-  // With our own address in hand, the payment page shouldn't ask for one. Square
-  // doesn't say which ways of asking for that it accepts, so they are tried in
-  // order of preference, starting with the one that last worked. The last is the
-  // long-standing one, where Square asks for the address (with ours filled in).
-  const preferred: CheckoutShape[] = shipTo ? ["direct", "charges", "square-asks"] : ["square-asks"];
-  const known = globalForSquare.voidsznCheckoutShape;
-  const shapes = known && preferred.includes(known) ? [known, ...preferred.filter((shape) => shape !== known)] : preferred;
+  // With our own address in hand, the payment page shouldn't ask for one. If
+  // Square ever turns that request down, the long-standing one is tried, where
+  // Square asks for the address (with ours filled in), so checkout keeps working.
+  const shapes: CheckoutShape[] = shipTo ? ["charges", "square-asks"] : ["square-asks"];
 
   const refusals: CheckoutRefusal[] = [];
   let created: Created | null = null;
@@ -356,7 +356,6 @@ export async function createCheckout(input: {
     }
   }
   if (!created) throw lastError;
-  if (shipTo) globalForSquare.voidsznCheckoutShape = used;
 
   const url = created.payment_link?.url;
   const orderId = created.payment_link?.order_id;
@@ -409,6 +408,8 @@ export type SquareOrder = {
   }[];
   fulfillments?: {
     type?: string;
+    /** What Square adds when the payment page took no address: just who it is for. */
+    digital_details?: { recipient?: { display_name?: string; email_address?: string; phone_number?: string } };
     shipment_details?: {
       recipient?: {
         display_name?: string;

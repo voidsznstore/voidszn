@@ -371,7 +371,13 @@ Payments run on Square. All Square code is in `src/lib/payments/`.
   it. It waits in the `checkouts` table, keyed by the Square order, and is put on the
   order when the payment comes back. Square is told not to ask for an address
   (`ask_for_shipping_address: false`) and is never sent ours: its `metadata` is not a
-  place for personal details. Unpaid rows are cleared after 60 days by the timed job.
+  place for personal details. Square refuses its own `shipping_fee` on a page with no
+  address form, so shipping goes on the order as a charge ("Standard shipping"). If
+  Square ever refuses that request, checkout falls back to the old one, where
+  Square's page asks for the address with ours filled in; the address left there is
+  then the one shipped to, and the order is flagged if it isn't the one the tax was
+  worked out for. `/api/health` shows which way the last payment page was opened
+  (`lastCheckout`) and the error codes of anything Square turned down. Unpaid rows are cleared after 60 days by the timed job.
   A state and ZIP code that disagree about Florida are refused, since tax follows
   where the parcel lands.
 - **Sales tax** (`src/lib/checkout/tax.ts`) uses the same rules as the books

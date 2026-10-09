@@ -61,7 +61,10 @@ export function readSquareOrder(
           postalCode: squareAddress?.postal_code ?? "",
           country: squareAddress?.country ?? "",
         };
-  const email = payment.buyer_email_address ?? recipient?.email_address;
+  // When the payment page took no address, Square keeps the buyer's email on a
+  // "digital" fulfillment instead of a shipment.
+  const digital = order.fulfillments?.find((item) => item.digital_details)?.digital_details?.recipient;
+  const email = payment.buyer_email_address ?? recipient?.email_address ?? digital?.email_address;
   const total = order.total_money?.amount;
   const paid = payment.amount_money?.amount;
 
