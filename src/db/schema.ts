@@ -297,6 +297,10 @@ export const products = pgTable(
     externalProductId: text("external_product_id"),
     productionDaysMin: integer("production_days_min"),
     productionDaysMax: integer("production_days_max"),
+    /** When this product was last copied to the relay store. See docs/relay.md. */
+    relaySyncedAt: timestamp("relay_synced_at", { withTimezone: true }),
+    /** Why the last copy to the relay store failed, in plain words. */
+    relayError: text("relay_error"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -465,6 +469,16 @@ export const orders = pgTable(
     trackingUrl: text("tracking_url"),
     shippedAt: timestamp("shipped_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    /**
+     * Sending to the relay store (docs/relay.md). A send holds a claim while it
+     * works, so two can never place the same order with the printer.
+     */
+    relayClaimedAt: timestamp("relay_claimed_at", { withTimezone: true }),
+    relayAttempts: integer("relay_attempts").notNull().default(0),
+    /** When the first send began. An order made by an earlier, cut-off try is looked for from here. */
+    relayFirstTriedAt: timestamp("relay_first_tried_at", { withTimezone: true }),
+    /** When the relay store was last asked how this order is getting on. */
+    relayCheckedAt: timestamp("relay_checked_at", { withTimezone: true }),
 
     affiliateId: uuid("affiliate_id").references(() => affiliates.id, { onDelete: "set null" }),
     notes: text("notes"),

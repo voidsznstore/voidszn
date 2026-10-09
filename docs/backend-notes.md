@@ -237,6 +237,25 @@ sales), just in ordered by `products.created_at`.
 - **Admin changes show on the store straight away:** every product and category action
   clears the catalog cache (`CATALOG_TAG`). Prices at checkout are read from the
   database every time.
+- **Relay** (`/admin/relay`, `src/lib/relay`, `src/db/queries/relay.ts`, full guide in
+  `docs/relay.md`): until Printmood has its own connection, products and paid orders
+  are copied into a WooCommerce shop that Printmood is connected to, and tracking is
+  read back. Off until `RELAY_WOO_URL`, `RELAY_WOO_KEY` and `RELAY_WOO_SECRET` are set.
+  - Only `src/lib/relay/woo.ts` knows the shop is WooCommerce.
+  - One order, one copy: a send claims the order (`relay_claimed_at`), makes the copy
+    unpaid, writes its id on the order, then releases it. A lost reply is settled by
+    looking the copy up by our order number before anything is made again. Read
+    "How one order is kept to one copy" in `docs/relay.md` before changing `orders.ts`.
+  - Sending by itself is a setting (`relay.settings`), off to begin with, because
+    placing an order costs money. It only takes orders paid after it was switched on,
+    and only once the cancel window (`siteConfig.orders.cancelWindow`) is up. The timed
+    job (`/api/cron/relay`) always finishes a cut-off send.
+  - Cancelling, refunding in full or hand-marking an order calls `withdrawFromRelay`,
+    which takes back every copy, recorded or not. Keep that call if those actions change.
+  - The customer's email address is never sent to the relay store.
+  - A relayed order has `fulfillment_provider = 'PRINTMOOD'` and `external_order_id`.
+    Problems go in `fulfillment_error` and raise an attention flag on the order.
+  - `npm run test:relay` needs a real WooCommerce shop to run against.
 
 - **Discounts** (`/admin/discounts`, `src/db/queries/admin-discounts.ts`): codes that
   take a percentage off, an amount off, or make shipping free. Each can have a minimum
@@ -300,8 +319,8 @@ sales), just in ordered by `products.created_at`.
   last line of every email, small and quiet on purpose; it must stay in every
   marketing email.
 
-Not built yet: staff accounts, the "delayed order" email, the fulfilment connection
-to the printer, a newsletter sign-up form on the store.
+Not built yet: the "delayed order" email, and Printmood's own connection (orders go
+through the relay store until then; see Relay above).
 
 ## When a page fails to load
 

@@ -25,6 +25,7 @@ import {
   markPaid,
 } from "@/db/queries/admin-manual-orders";
 import { AccountingError, setOrderCost } from "@/db/queries/accounting";
+import { resetRelay } from "@/db/queries/relay";
 import { requireAdmin } from "@/lib/admin/session";
 import { parseDollars } from "@/lib/money";
 import {
@@ -35,6 +36,7 @@ import {
   sendOrderShipped,
 } from "@/lib/email/order-emails";
 import { SquareError, refundPayment } from "@/lib/payments/square";
+import { pushAddressToRelay, sendOrderToRelay, withdrawFromRelay } from "@/lib/relay/orders";
 
 export type OrderActionState = { error?: string; done?: string };
 
@@ -64,9 +66,34 @@ async function run(
 }
 
 export async function inProductionAction(_previous: OrderActionState, form: FormData) {
-  return run(form, "Marked as sent to the printer.", (number, actor) =>
-    markInProduction(getDb(), number, actor),
-  );
+  let relayNote = "";
+  const result = await run(form, "Marked as sent to the printer.", async (number, actor) => {
+    await markInProduction(getDb(), number, actor);
+    // Placed by hand, so any copy the relay made or half-made must not be printed as well.
+    relayNote = await withdrawFromRelay(number, "placed by hand");
+  });
+  return result.done ? { done: `Marked as sent to the printer.${relayNote}` } : result;
+}
+
+/** Places the order with the printer through the relay store. */
+export async function relayAction(_previous: OrderActionState, form: FormData) {
+  let relayOrderId = "";
+  const result = await run(form, "Sent.", async (number, actor) => {
+    const detail = await getOrderDetail(getDb(), number);
+    if (!detail) return { error: "That order could not be found." };
+    // After a failure the old try is cleared first, so a fresh copy is made.
+    if (form.get("again") === "yes" && !(await resetRelay(getDb(), number, actor))) {
+      return { error: "This order can't be sent again right now. Refresh the page to see where it stands." };
+    }
+    const outcome = await sendOrderToRelay(detail.order.id, actor);
+    if (!outcome.ok) {
+      // The reason is kept on the order, so show the page as it now stands.
+      refresh();
+      return { error: outcome.error };
+    }
+    relayOrderId = outcome.relayOrderId;
+  });
+  return result.done ? { done: `Sent to the printer. It is order ${relayOrderId} in the relay store.` } : result;
 }
 
 export async function shippedAction(_previous: OrderActionState, form: FormData) {
@@ -108,6 +135,7 @@ const dollars = z
  */
 export async function refundAction(_previous: OrderActionState, form: FormData) {
   let emailNote = "";
+  let relayNote = "";
   const result = await run(form, "Refunded.", async (number, actor) => {
     const parsed = z
       .object({ amount: dollars, reason: text(190), refundedBefore: z.coerce.number().int().min(0) })
@@ -191,10 +219,13 @@ export async function refundAction(_previous: OrderActionState, form: FormData) 
       };
     }
 
+    // A full refund closes the order, so the printer must not go on to make it.
+    if (order.refundedCents + amount >= order.totalCents) relayNote = await withdrawFromRelay(number, "refunded");
+
     const email = await sendOrderRefunded(number, amount);
     emailNote = email.sent ? " The customer has been emailed." : "";
   });
-  return result.done ? { done: `Refunded.${emailNote}` } : result;
+  return result.done ? { done: `Refunded.${relayNote}${emailNote}` } : result;
 }
 
 /** Sends the order confirmation again, for a customer who says they never got it. */
@@ -220,15 +251,19 @@ export async function deliveredAction(_previous: OrderActionState, form: FormDat
 
 export async function cancelAction(_previous: OrderActionState, form: FormData) {
   let emailNote = "";
+  let relayNote = "";
   const result = await run(form, "Order cancelled.", async (number, actor) => {
     await cancelOrder(getDb(), number, actor, text(300).parse(form.get("reason") ?? ""));
+    // If the printer already has it, it is cancelled there too so it isn't made.
+    relayNote = await withdrawFromRelay(number, "cancelled");
     if (form.get("notify") === "on") emailNote = emailedNote(await sendOrderCancelled(number));
   });
-  return result.done ? { done: `Order cancelled.${emailNote}` } : result;
+  return result.done ? { done: `Order cancelled.${relayNote}${emailNote}` } : result;
 }
 
 export async function addressAction(_previous: OrderActionState, form: FormData) {
-  return run(form, "Address saved.", async (number, actor) => {
+  let relayNote = "";
+  const result = await run(form, "Address saved.", async (number, actor) => {
     const required = (label: string, max: number) => text(max).min(1, `Enter the ${label}.`);
     const parsed = z
       .object({
@@ -248,7 +283,9 @@ export async function addressAction(_previous: OrderActionState, form: FormData)
       name,
       address: { ...rest, ...(line2 ? { line2 } : {}) },
     });
+    relayNote = await pushAddressToRelay(number);
   });
+  return result.done ? { done: `Address saved.${relayNote}` } : result;
 }
 
 export async function resolveAction(_previous: OrderActionState, form: FormData) {

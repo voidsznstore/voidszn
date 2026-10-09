@@ -17,6 +17,7 @@ const links = [
   { href: "/admin/categories", label: "Categories" },
   { href: "/admin/banner", label: "Banner" },
   { href: "/admin/popups", label: "Pop-ups" },
+  { href: "/admin/relay", label: "Relay" },
   { href: "/admin/team", label: "Team" },
   { href: "/admin/security", label: "Security" },
 ];

@@ -260,6 +260,9 @@ export const markInProduction = (db: Database, orderNumber: string, actor: strin
       status: "IN_PRODUCTION",
       fulfillmentStatus: "SUBMITTED",
       fulfillmentSubmittedAt: new Date(),
+      // Placed by a person, so the relay neither sends it nor follows it.
+      fulfillmentProvider: "MANUAL",
+      fulfillmentError: null,
     },
     event: { type: "order.in_production", message: "Sent to the printer" },
   });

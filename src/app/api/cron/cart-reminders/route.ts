@@ -9,7 +9,7 @@ import { followUpCardPayouts } from "@/lib/payouts/card";
  * Called on a timer (see vercel.json) to do the store's small background jobs:
  * send cart reminders that are due, send admin invitations that are waiting,
  * pick up the real card fee on recent orders, and follow up payouts to
- * partners' cards.
+ * partners' cards. The relay store has its own job (`/api/cron/relay`).
  *
  * It takes no input and each job only finishes work that was already waiting,
  * once, so calling it by hand does nothing a few minutes' wait wouldn't. If

@@ -84,7 +84,10 @@ export default function PrivacyPage() {
       </p>
       <ul>
         <li>our payment processor, to take payment and screen for fraud;</li>
-        <li>our printing partner, which receives your name, address and order to make and ship it;</li>
+        <li>
+          our printing partner, which receives your name, address, phone number if you gave one,
+          and order to make and ship it;
+        </li>
         <li>shipping carriers, to deliver it;</li>
         <li>our email and text service, website host and analytics providers;</li>
         <li>authorities, when the law requires it.</li>

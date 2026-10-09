@@ -9,6 +9,7 @@ import { getDb } from "@/db";
 import { PAYMENT_METHODS, PICKUP } from "@/db/queries/admin-manual-orders";
 import { type OrderDetail, getOrderDetail } from "@/db/queries/admin-orders";
 import { formatDateTime, statusLabel } from "@/lib/admin/format";
+import { isRelayConfigured } from "@/lib/relay/woo";
 import { requireAdmin } from "@/lib/admin/session";
 import { isEmailConfigured } from "@/lib/email/send";
 import { isInboxConfigured } from "@/lib/mail/gmail";
@@ -21,6 +22,7 @@ import {
   costAction,
   deliveredAction,
   inProductionAction,
+  relayAction,
   noteAction,
   paidAction,
   refundAction,
@@ -30,6 +32,9 @@ import {
 } from "../actions";
 
 export const metadata: Metadata = { title: "Order" };
+
+/** Sending an order to the printer talks to another shop, which can be slow. */
+export const maxDuration = 60;
 
 type Props = PageProps<"/admin/orders/[number]">;
 
@@ -116,6 +121,10 @@ async function Order({ params }: Pick<Props, "params">) {
   const open = unpaid || order.status === "PAID" || order.status === "IN_PRODUCTION";
   const canShip = order.status === "PAID" || order.status === "IN_PRODUCTION";
   const viaSquare = order.paymentProvider === "square";
+  // Orders can go to the printer through the relay store once it is connected.
+  const relayOn = isRelayConfigured();
+  const relayFailed = order.fulfillmentStatus === "FAILED";
+  const viaRelay = order.fulfillmentProvider === "PRINTMOOD" && Boolean(order.externalOrderId);
   const shipped = order.status === "SHIPPED" || order.status === "DELIVERED";
   const emailsOn = isEmailConfigured();
   const refundable = order.totalCents - order.refundedCents;
@@ -259,7 +268,44 @@ async function Order({ params }: Pick<Props, "params">) {
               </>
             ) : null}
 
-            {order.status === "PAID" ? (
+            {order.status === "PAID" && relayOn ? (
+              <>
+                {order.fulfillmentError ? (
+                  <p role="status" className="text-sm text-ember">
+                    {relayFailed ? "" : "Not sent yet. "}
+                    {order.fulfillmentError}
+                  </p>
+                ) : (
+                  <p className="text-bone-dim">
+                    Send this order to the printer through the relay store. It is placed there exactly once, however
+                    many times this is pressed.
+                  </p>
+                )}
+                <OrderActionForm
+                  action={relayAction}
+                  orderNumber={order.orderNumber}
+                  submitLabel={relayFailed ? "Send it again" : "Send to the printer"}
+                  pendingLabel="Sending…"
+                  tone="accent"
+                >
+                  {relayFailed ? <input type="hidden" name="again" value="yes" /> : null}
+                </OrderActionForm>
+                <details className="text-sm text-smoke">
+                  <summary className="inline-flex min-h-11 cursor-pointer items-center link">
+                    Placed it with the printer yourself?
+                  </summary>
+                  <div className="pt-2">
+                    <OrderActionForm
+                      action={inProductionAction}
+                      orderNumber={order.orderNumber}
+                      submitLabel="Mark as sent to the printer"
+                    />
+                  </div>
+                </details>
+              </>
+            ) : null}
+
+            {order.status === "PAID" && !relayOn ? (
               <>
                 <p className="text-bone-dim">
                   Place this order with the printer, then mark it so you know it&apos;s been sent.
@@ -276,8 +322,15 @@ async function Order({ params }: Pick<Props, "params">) {
             {order.status === "IN_PRODUCTION" ? (
               <p className="text-bone-dim">
                 Sent to the printer
-                {order.fulfillmentSubmittedAt ? ` ${formatDateTime(order.fulfillmentSubmittedAt)}` : ""}.
-                Add the tracking details when it ships.
+                {order.fulfillmentSubmittedAt ? ` ${formatDateTime(order.fulfillmentSubmittedAt)}` : ""}.{" "}
+                {viaRelay
+                  ? `It is order ${order.externalOrderId} in the relay store. When the printer adds tracking it is filled in here by itself and the customer is emailed.`
+                  : "Add the tracking details when it ships."}
+              </p>
+            ) : null}
+            {order.status === "IN_PRODUCTION" && order.fulfillmentError ? (
+              <p role="status" className="text-sm text-ember">
+                {order.fulfillmentError}
               </p>
             ) : null}
 

@@ -5,6 +5,7 @@ import { getSquareStatus } from "@/lib/payments/square";
 import { getStripeStatus } from "@/lib/payments/stripe";
 import { checkEmail } from "@/lib/email/send";
 import { checkInbox } from "@/lib/mail/gmail";
+import { getRelayStatus } from "@/lib/relay/woo";
 import { checkStorage, checkUpload } from "@/lib/storage";
 
 /**
@@ -33,6 +34,8 @@ export async function GET() {
     inbox,
     // Stripe, for paying partners to their cards.
     cardPayouts,
+    // The relay store that passes orders to the printer. Says only whether keys are set.
+    relay: getRelayStatus(),
     // DNS records are public by nature, so listing the ones still needed gives nothing away.
     ...(email.dns ? { emailDns: email.dns } : {}),
   };
