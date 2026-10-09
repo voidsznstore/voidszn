@@ -152,6 +152,32 @@ sales), just in ordered by `products.created_at`.
   sets up to six lines, the color of the words, and whether it shows at all. It is one
   row in `settings` (`store.banner`), read through `src/lib/banner` (cached, cleared by
   `BANNER_TAG` on save). `BannerStrip` draws it on the store and in the admin preview.
+- **Pop-ups** (`/admin/popups`, table `popups`, `src/lib/popups`): each one is switched
+  on and off by itself. Three kinds: EMAIL (asks for an address, gives a code), CODE
+  (shows a code, the button saves it to the order) and MESSAGE (a headline and a button
+  to a page of the store). Each has its own words, when it opens (after N seconds, on
+  the way out, or half way down the page), where (every page, home, or product pages)
+  and how many days to wait before showing again to someone who closed it.
+  - A visitor sees one pop-up per visit at most: the first in `position` order that is
+    on, fits the page and that they haven't closed lately. Never on `/checkout`,
+    `/cart/...`, `/order/...`, `/unsubscribe/...` or the admin (`isQuietPath`).
+  - What a browser has closed or signed up to is kept in that browser only
+    (`voidszn-popups-v1`). The Privacy page says so.
+  - The store reads them through `getLivePopups()` (cached, cleared by `POPUPS_TAG`).
+    A pop-up whose code can't be used right now is left out (`whyHidden`), and the
+    admin list says why. Saving, switching or deleting a discount code clears the tag too.
+  - An EMAIL pop-up's code is never sent to the browser until someone signs up
+    (`POST /api/popups/join`, `src/lib/popups/join.ts`). The answer is the same whether
+    or not the address was already on the list. An address that unsubscribed stays
+    unsubscribed. A hidden field turns scripts away.
+  - The welcome email is the "Welcome" preset with the pop-up's code, sent once per
+    address ever (`subscribers.welcome_sent_at`), at most 120 an hour across the store,
+    with an unsubscribe link from `subscribers.unsubscribe_token`.
+  - New sign-ups are counted per pop-up by `subscribers.source = 'popup:<id>'`.
+  - The first pop-up (10% off a first order, code WELCOME10) is made by migration 0011.
+- **First-order codes**: `discount_codes.first_order_only`. Checked against the email at
+  checkout (`hasOrdered`: any order that isn't cancelled), and left out of an email to
+  someone who has ordered. Ticked on the code under Discounts.
 - **Orders:** worked by hand for now: mark as sent to the printer, then shipped with
   tracking, then delivered. Every change is written to the order's history with who
   did it.

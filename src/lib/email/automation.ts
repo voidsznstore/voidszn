@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import type { Database } from "@/db";
-import { type DiscountCode, countRedemptions, findDiscountById } from "@/db/queries/discounts";
+import { type DiscountCode, countRedemptions, findDiscountById, hasOrdered } from "@/db/queries/discounts";
 import { getSetting, setSetting } from "@/db/queries/settings";
 import { codeProblem } from "@/lib/checkout/discounts";
 import type { EmailDiscount } from "./templates";
@@ -72,6 +72,7 @@ export const toEmailDiscount = (row: DiscountCode): EmailDiscount => ({
   minOrderCents: row.minOrderCents,
   expiresAt: row.expiresAt,
   oncePerCustomer: row.perCustomerLimit !== null,
+  firstOrderOnly: row.firstOrderOnly,
   limited: row.maxUses !== null,
 });
 
@@ -101,6 +102,7 @@ export async function usableEmailDiscount(
       ) {
         return null;
       }
+      if (row.firstOrderOnly && (await hasOrdered(db, recipient.email))) return null;
     }
     return toEmailDiscount(row);
   } catch {

@@ -1,6 +1,6 @@
 "use server";
 
-import { refresh } from "next/cache";
+import { refresh, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb } from "@/db";
@@ -15,6 +15,7 @@ import {
 import { fromLocalInput } from "@/lib/admin/format";
 import { requireAdmin } from "@/lib/admin/session";
 import { CODE_PATTERN, normalizeCode } from "@/lib/discounts/describe";
+import { POPUPS_TAG } from "@/lib/popups/shape";
 
 export type DiscountFormState = { error?: string; saved?: boolean };
 
@@ -85,6 +86,7 @@ function read(form: FormData): { input: DiscountInput } | { error: string } {
       minOrderCents,
       maxUses,
       oncePerCustomer: on("oncePerCustomer"),
+      firstOrderOnly: on("firstOrderOnly"),
       startsAt,
       expiresAt,
       isActive: on("isActive"),
@@ -127,6 +129,8 @@ export async function updateDiscountAction(
     if (error instanceof FormError) return { error: error.message };
     throw error;
   }
+  // A pop-up never offers a code that no longer works, so the store's pop-ups are read afresh.
+  updateTag(POPUPS_TAG);
   refresh();
   return { saved: true };
 }
@@ -140,6 +144,7 @@ export async function toggleDiscountAction(
   const id = z.string().uuid().safeParse(form.get("id"));
   if (!id.success) return { error: "That code could not be found." };
   await setDiscountActive(getDb(), id.data, form.get("turn") === "on");
+  updateTag(POPUPS_TAG);
   refresh();
   return { saved: true };
 }
@@ -152,5 +157,6 @@ export async function deleteDiscountAction(
   const id = z.string().uuid().safeParse(form.get("id"));
   if (!id.success) return { error: "That code could not be found." };
   await deleteDiscount(getDb(), id.data);
+  updateTag(POPUPS_TAG);
   redirect("/admin/discounts?deleted=1");
 }

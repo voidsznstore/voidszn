@@ -78,6 +78,13 @@
       "when": 1791553951718,
       "tag": "0010_card_payouts",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791556959016,
+      "tag": "0011_popups",
+      "breakpoints": true
     }
   ]
 }

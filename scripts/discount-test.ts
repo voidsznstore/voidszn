@@ -60,6 +60,7 @@ const code = (overrides: Partial<DiscountCode>): DiscountCode => ({
   maxUses: null,
   usedCount: 0,
   perCustomerLimit: null,
+  firstOrderOnly: false,
   isActive: true,
   startsAt: null,
   expiresAt: null,

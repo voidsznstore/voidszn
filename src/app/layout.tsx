@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 // Fonts are bundled with the app, so nothing is fetched from a third party at runtime.
 import "@fontsource/anton/400.css";
 import "@fontsource-variable/archivo/standard.css";
 import "@fontsource-variable/jetbrains-mono/wght.css";
 import { CartProvider } from "@/components/cart/cart-provider";
 import { CodeLink } from "@/components/cart/code-link";
+import { Popups } from "@/components/site/popups";
 import { siteConfig } from "@/lib/site-config";
 import "./globals.css";
 
@@ -32,6 +34,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <CartProvider>{children}</CartProvider>
         <CodeLink />
+        {/* Reads the address to decide where to open, which isn't known while a page is prebuilt. */}
+        <Suspense fallback={null}>
+          <Popups />
+        </Suspense>
       </body>
     </html>
   );

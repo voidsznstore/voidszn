@@ -93,6 +93,7 @@ async function Discount({ params, searchParams }: Props) {
           hasLimit: discount.maxUses !== null,
           maxUses: discount.maxUses !== null ? String(discount.maxUses) : "",
           oncePerCustomer: discount.perCustomerLimit !== null,
+          firstOrderOnly: discount.firstOrderOnly,
           startsAt: toLocalInput(discount.startsAt),
           hasEnd: discount.expiresAt !== null,
           expiresAt: toLocalInput(discount.expiresAt),

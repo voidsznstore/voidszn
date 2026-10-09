@@ -12,6 +12,7 @@ import {
 } from "../schema";
 import { FormError } from "./admin-catalog";
 import { listMarketingRecipients } from "./admin-customers";
+import { subscriberForToken } from "./subscribers";
 
 export type CampaignInput = {
   subject: string;
@@ -317,6 +318,9 @@ export async function emailForToken(db: Database, token: string): Promise<string
     .where(eq(abandonedCarts.recoveryToken, token))
     .limit(1);
   if (cart) return cart.email;
+  // Emails sent to one subscriber alone, like the welcome, carry the subscriber's own token.
+  const subscriber = await subscriberForToken(db, token);
+  if (subscriber) return subscriber;
   // The "delivered" email, when it carries a thank-you code, uses the order's own id.
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) return null;
   const [order] = await db.select({ email: orders.email }).from(orders).where(eq(orders.id, token)).limit(1);

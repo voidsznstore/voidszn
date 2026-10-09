@@ -1,6 +1,6 @@
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { Database } from "../index";
-import { discountCodes, discountRedemptions } from "../schema";
+import { discountCodes, discountRedemptions, orders } from "../schema";
 
 type Executor = Pick<Database, "update">;
 
@@ -33,6 +33,16 @@ export async function countRedemptions(db: Database, discountCodeId: string, ema
       ),
     );
   return row?.value ?? 0;
+}
+
+/** Whether this address has an order already. A cancelled order doesn't count. */
+export async function hasOrdered(db: Database, email: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.email, email.trim().toLowerCase()), sql`${orders.status}::text <> 'CANCELLED'`))
+    .limit(1);
+  return row !== undefined;
 }
 
 /**

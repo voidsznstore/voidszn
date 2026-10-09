@@ -26,6 +26,7 @@ export type DiscountFormValues = {
   hasLimit: boolean;
   maxUses: string;
   oncePerCustomer: boolean;
+  firstOrderOnly: boolean;
   /** Date-and-time field values in the store's time zone. */
   startsAt: string;
   hasEnd: boolean;
@@ -44,6 +45,7 @@ export const BLANK_DISCOUNT: DiscountFormValues = {
   hasLimit: false,
   maxUses: "",
   oncePerCustomer: false,
+  firstOrderOnly: false,
   startsAt: "",
   hasEnd: false,
   expiresAt: "",
@@ -119,7 +121,11 @@ function DiscountForm({ discount, timeZoneName }: Props) {
     values.hasLimit && Number(values.maxUses) > 0
       ? `Can be used ${Number(values.maxUses).toLocaleString("en-US")} ${Number(values.maxUses) === 1 ? "time" : "times"} in total`
       : "No limit on total uses",
-    values.oncePerCustomer ? "Once per customer" : "Customers can use it more than once",
+    values.firstOrderOnly
+      ? "First order only"
+      : values.oncePerCustomer
+        ? "Once per customer"
+        : "Customers can use it more than once",
     values.startsAt ? `Starts ${readable(values.startsAt)}` : "Works as soon as it is saved",
     values.hasEnd && values.expiresAt ? `Ends ${readable(values.expiresAt)}` : "No end date",
   ];
@@ -307,6 +313,23 @@ function DiscountForm({ discount, timeZoneName }: Props) {
             </label>
             <p id="discount-once-hint" className={`${small} pl-8`}>
               Checked against the email given at checkout.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1 border-t border-line pt-4">
+            <label className="flex min-h-11 items-center gap-3">
+              <input
+                type="checkbox"
+                name="firstOrderOnly"
+                checked={values.firstOrderOnly}
+                onChange={(event) => set("firstOrderOnly", event.target.checked)}
+                aria-describedby="discount-first-hint"
+                className={check}
+              />
+              <span>First order only</span>
+            </label>
+            <p id="discount-first-hint" className={`${small} pl-8`}>
+              Only works for an email that has never ordered. For a welcome offer.
             </p>
           </div>
         </section>

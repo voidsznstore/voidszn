@@ -117,7 +117,9 @@ function Checkout() {
           // order is kept for when the cart grows. Any other is dropped.
           setCodeNote(data.codeError);
           if (!data.codeCanApplyLater) setDiscountCode(null);
-        } else {
+        } else if (usedCode) {
+          // Only a code that went through clears the note. Dropping a refused code
+          // prices the cart again without one, and that must not wipe the reason.
           setCodeNote(null);
         }
       } catch (error) {

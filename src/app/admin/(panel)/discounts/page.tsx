@@ -191,7 +191,11 @@ async function Discounts({ searchParams }: Pick<Props, "searchParams">) {
                     </td>
                     <td className="py-2 pr-4">
                       <span className="block">{discountSummary(discount)}</span>
-                      {discount.perCustomerLimit ? <span className="block text-smoke">Once per customer</span> : null}
+                      {discount.firstOrderOnly ? (
+                        <span className="block text-smoke">First order only</span>
+                      ) : discount.perCustomerLimit ? (
+                        <span className="block text-smoke">Once per customer</span>
+                      ) : null}
                     </td>
                     <td className="num py-2 pr-4">
                       {discount.usedCount}

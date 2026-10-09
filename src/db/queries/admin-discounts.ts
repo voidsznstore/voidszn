@@ -158,6 +158,8 @@ export type DiscountInput = {
   minOrderCents: number;
   maxUses: number | null;
   oncePerCustomer: boolean;
+  /** Only for an email that has never ordered. Off unless said. */
+  firstOrderOnly?: boolean;
   startsAt: Date | null;
   expiresAt: Date | null;
   isActive: boolean;
@@ -171,6 +173,7 @@ const fields = (input: DiscountInput) => ({
   minOrderCents: input.minOrderCents,
   maxUses: input.maxUses,
   perCustomerLimit: input.oncePerCustomer ? 1 : null,
+  firstOrderOnly: input.firstOrderOnly ?? false,
   startsAt: input.startsAt,
   expiresAt: input.expiresAt,
   isActive: input.isActive,

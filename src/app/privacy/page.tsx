@@ -56,6 +56,11 @@ export default function PrivacyPage() {
           <strong>Cart contents:</strong> saved in your browser so your cart is still there when
           you come back.
         </li>
+        <li>
+          <strong>Pop-up choices:</strong> whether you closed an offer or signed up through one,
+          saved in your browser so it isn&apos;t shown to you again too soon. This stays on your
+          device and is not sent to us.
+        </li>
       </ul>
 
       <h2>How we use it</h2>

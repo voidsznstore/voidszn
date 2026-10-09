@@ -49,6 +49,9 @@ advice. Have a lawyer read the policy pages before the store takes real orders.
       unsubscribe link. Keep that sentence at checkout and the matching lines in the
       Privacy page for as long as reminders are switched on (Campaigns, Automatic
       emails). Have the lawyer confirm this is fine for every state you ship to.
+- [ ] Pop-ups: the email sign-up says in plain words that signing up means marketing
+      emails, with a link to the Privacy page. Keep that line. The code it promises must
+      be the code it gives, and a countdown or "ends today" on a pop-up must be true.
 - [ ] Discounts: a "sale" price or code must be a real saving, and an end date in an
       email must be the code's real end date.
 - [ ] Texts (TCPA): only to people who gave written consent through an unchecked box or

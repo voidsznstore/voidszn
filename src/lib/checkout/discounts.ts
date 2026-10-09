@@ -1,5 +1,5 @@
 import { getDb, hasDatabase } from "@/db";
-import { type DiscountCode, countRedemptions, findDiscountByCode } from "@/db/queries/discounts";
+import { type DiscountCode, countRedemptions, findDiscountByCode, hasOrdered } from "@/db/queries/discounts";
 import { CODE_PATTERN, discountLabel, normalizeCode } from "@/lib/discounts/describe";
 import { formatMoney, percentOf } from "@/lib/money";
 import type { PricedCart } from "./pricing";
@@ -89,6 +89,10 @@ export async function resolveDiscount(
             : "That code has already been used as many times as it allows with this email.",
       };
     }
+  }
+
+  if (row.firstOrderOnly && email && (await hasOrdered(db, email))) {
+    return { ok: false, error: "That code is for a first order, and this email has ordered before." };
   }
 
   return applyCode(row, cart);

@@ -562,6 +562,8 @@ export const discountCodes = pgTable(
     maxUses: integer("max_uses"),
     usedCount: integer("used_count").notNull().default(0),
     perCustomerLimit: integer("per_customer_limit"),
+    /** Only works for an email address that has never ordered. */
+    firstOrderOnly: boolean("first_order_only").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     startsAt: timestamp("starts_at", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
@@ -844,9 +846,53 @@ export const subscribers = pgTable("subscribers", {
   source: text("source"),
   isEmailSubscribed: boolean("is_email_subscribed").notNull().default(true),
   isSmsSubscribed: boolean("is_sms_subscribed").notNull().default(false),
+  /** Goes in the unsubscribe link of emails sent to this address alone, like the welcome. */
+  unsubscribeToken: text("unsubscribe_token").unique(),
+  /** When the welcome email went out. It is only ever sent once. */
+  welcomeSentAt: timestamp("welcome_sent_at", { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/**
+ * Pop-ups on the store, switched on and off in the admin. A visitor sees at
+ * most one per visit: the first in `position` order that fits the page.
+ * The words live in `src/lib/popups/shape.ts`.
+ */
+export const popups = pgTable(
+  "popups",
+  {
+    id: id(),
+    /** The owner's own name for it. Never shown to customers. */
+    name: text("name").notNull(),
+    /** EMAIL asks for an address and gives a code, CODE shows a code, MESSAGE is an announcement. */
+    kind: text("kind").$type<"EMAIL" | "CODE" | "MESSAGE">().notNull(),
+    isEnabled: boolean("is_enabled").notNull().default(false),
+    position: integer("position").notNull().default(0),
+    eyebrow: text("eyebrow"),
+    headline: text("headline").notNull(),
+    body: text("body").notNull().default(""),
+    buttonLabel: text("button_label").notNull(),
+    /** A page of the store, starting with a slash. */
+    buttonUrl: text("button_url"),
+    discountCodeId: uuid("discount_code_id").references(() => discountCodes.id, { onDelete: "set null" }),
+    /** EMAIL only: also send the welcome email with the code. */
+    sendsEmail: boolean("sends_email").notNull().default(true),
+    trigger: text("trigger").$type<"DELAY" | "EXIT" | "SCROLL">().notNull().default("DELAY"),
+    delaySeconds: integer("delay_seconds").notNull().default(6),
+    pages: text("pages").$type<"ALL" | "HOME" | "PRODUCTS">().notNull().default("ALL"),
+    /** Days before it may open again for someone who closed it. */
+    showAgainDays: integer("show_again_days").notNull().default(7),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check("popups_kind", sql`${t.kind} IN ('EMAIL', 'CODE', 'MESSAGE')`),
+    check("popups_trigger", sql`${t.trigger} IN ('DELAY', 'EXIT', 'SCROLL')`),
+    check("popups_pages", sql`${t.pages} IN ('ALL', 'HOME', 'PRODUCTS')`),
+    index("popups_enabled_idx").on(t.isEnabled, t.position),
+  ],
+);
 
 /**
  * Addresses that asked to stop getting marketing emails. Checked on every

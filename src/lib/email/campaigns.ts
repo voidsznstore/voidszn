@@ -24,7 +24,11 @@ export const unsubscribeUrl = (token: string) => `${siteConfig.url}/unsubscribe/
 /** The token used in test emails, which have nobody to unsubscribe. */
 export const TEST_TOKEN = "test";
 
-function emailFor(content: CampaignContent, to: string, token: string, key: string): Email {
+/**
+ * A marketing email ready to send to one address: the content, the unsubscribe
+ * link for `token`, and the headers that give mail apps their own unsubscribe button.
+ */
+export function marketingEmail(content: CampaignContent, to: string, token: string, key: string): Email {
   const page = unsubscribeUrl(token);
   return {
     to,
@@ -76,7 +80,7 @@ export async function contentOf(
 
 /** Sends one copy to the owner, to see how it looks in a real inbox. */
 export async function sendTest(content: CampaignContent, to: string) {
-  const email = emailFor(content, to, TEST_TOKEN, `campaign-test/${Date.now()}`);
+  const email = marketingEmail(content, to, TEST_TOKEN, `campaign-test/${Date.now()}`);
   return sendEmail({ ...email, subject: `[Test] ${email.subject}` });
 }
 
@@ -108,7 +112,7 @@ export async function sendCampaign(id: string): Promise<SendProgress> {
   if (campaign.status === "DRAFT") return { ...detail.sends };
 
   const content = await contentOf(campaign);
-  const build = (row: ClaimedSend) => emailFor(content, row.email, row.token, `campaign/${id}/${row.id}`);
+  const build = (row: ClaimedSend) => marketingEmail(content, row.email, row.token, `campaign/${id}/${row.id}`);
 
   const started = Date.now();
   const outOfTime = () => Date.now() - started > TIME_BUDGET_MS;

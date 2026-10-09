@@ -67,6 +67,8 @@ export type EmailDiscount = {
   minOrderCents: number;
   expiresAt: Date | null;
   oncePerCustomer: boolean;
+  /** True when it only works for someone who hasn't ordered before. */
+  firstOrderOnly?: boolean;
   /** True when only so many uses are allowed in total. */
   limited?: boolean;
 };
@@ -111,7 +113,7 @@ export function couponTerms(discount: EmailDiscount): string {
   const tidy = (cents: number) => formatMoney(cents).replace(/\.00$/, "");
   return [
     discount.minOrderCents > 0 ? `On orders over ${tidy(discount.minOrderCents)}.` : null,
-    discount.oncePerCustomer ? "One use per customer." : null,
+    discount.firstOrderOnly ? "First order only." : discount.oncePerCustomer ? "One use per customer." : null,
     discount.limited ? "Limited number of uses." : null,
     discount.expiresAt ? `Ends ${lastDay(discount.expiresAt)}.` : null,
   ]
