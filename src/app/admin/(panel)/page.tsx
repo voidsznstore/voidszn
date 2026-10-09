@@ -25,8 +25,8 @@ async function Overview() {
   const { toFulfil, week, flagged, recent } = await getOverview(getDb());
 
   const stats = [
-    { label: "Orders to fulfil", value: String(toFulfil), href: "/admin/orders?status=to-fulfil" },
-    { label: "Need attention", value: String(flagged), href: "/admin/orders?status=attention" },
+    { label: "Orders to fulfil", value: String(toFulfil), href: "/admin/orders?view=to-fulfil" },
+    { label: "Need attention", value: String(flagged), href: "/admin/orders?view=attention" },
     { label: "Orders, last 7 days", value: String(week.orders), href: "/admin/orders" },
     { label: "Sales, last 7 days", value: formatMoney(week.revenueCents), href: "/admin/orders" },
   ];

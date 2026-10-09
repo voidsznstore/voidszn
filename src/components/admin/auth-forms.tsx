@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useId } from "react";
+import { useId } from "react";
 import { type AuthFormState, createOwner, signIn } from "@/app/admin/(auth)/actions";
+import { useFormAction } from "./use-form-action";
 
 const initial: AuthFormState = {};
 
@@ -36,9 +37,9 @@ function FormError({ message }: { message?: string }) {
 }
 
 export function SignInForm() {
-  const [state, action, pending] = useActionState(signIn, initial);
+  const { state, action, pending, onSubmit } = useFormAction(signIn, initial);
   return (
-    <form action={action} className="flex flex-col gap-5">
+    <form action={action} onSubmit={onSubmit} className="flex flex-col gap-5">
       <Field
         label="Email"
         name="email"
@@ -63,9 +64,9 @@ export function SignInForm() {
 }
 
 export function SetupForm({ code, minLength }: { code: string; minLength: number }) {
-  const [state, action, pending] = useActionState(createOwner, initial);
+  const { state, action, pending, onSubmit } = useFormAction(createOwner, initial);
   return (
-    <form action={action} className="flex flex-col gap-5">
+    <form action={action} onSubmit={onSubmit} className="flex flex-col gap-5">
       <input type="hidden" name="code" value={code} />
       <Field
         label="Your name"

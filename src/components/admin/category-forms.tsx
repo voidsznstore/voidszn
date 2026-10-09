@@ -1,16 +1,17 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
   type CategoryFormState,
   createCategoryAction,
   updateCategoryAction,
 } from "@/app/admin/(panel)/categories/actions";
+import { useFormAction } from "./use-form-action";
 
 const initial: CategoryFormState = {};
 
 export function NewCategoryForm({ kind, label }: { kind: "PRODUCT_TYPE" | "INTEREST"; label: string }) {
-  const [state, action, pending] = useActionState(createCategoryAction, initial);
+  const { state, action, pending, onSubmit } = useFormAction(createCategoryAction, initial);
   const formRef = useRef<HTMLFormElement>(null);
 
   // Clear the box once the category has been added.
@@ -19,7 +20,7 @@ export function NewCategoryForm({ kind, label }: { kind: "PRODUCT_TYPE" | "INTER
   }, [state]);
 
   return (
-    <form ref={formRef} action={action} className="flex flex-col gap-2">
+    <form ref={formRef} action={action} onSubmit={onSubmit} className="flex flex-col gap-2">
       <input type="hidden" name="kind" value={kind} />
       <div className="flex flex-wrap gap-2">
         <input
@@ -46,10 +47,10 @@ export function EditCategoryForm({
 }: {
   category: { id: string; name: string; description: string; isActive: boolean };
 }) {
-  const [state, action, pending] = useActionState(updateCategoryAction, initial);
+  const { state, action, pending, onSubmit } = useFormAction(updateCategoryAction, initial);
 
   return (
-    <form action={action} className="flex max-w-xl flex-col gap-5">
+    <form action={action} onSubmit={onSubmit} className="flex max-w-xl flex-col gap-5">
       <input type="hidden" name="id" value={category.id} />
       <label className="flex flex-col gap-2">
         <span className="text-sm font-semibold">Name</span>

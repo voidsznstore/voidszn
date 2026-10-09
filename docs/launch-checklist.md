@@ -5,6 +5,10 @@ advice. Have a lawyer read the policy pages before the store takes real orders.
 
 ## Before the first real order
 
+- [ ] Replace the four sample products with real ones in the admin (or delete them).
+- [ ] Every product on sale has real photos, a description, details and the right
+      product type.
+
 - [ ] Fill every `[PLACEHOLDER]` in `src/lib/site-config.ts` (legal name, mailing address,
       support email, legal email, governing state). The policy pages show a "Draft" notice
       until this is done.

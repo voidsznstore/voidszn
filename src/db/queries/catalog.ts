@@ -162,7 +162,15 @@ export async function fetchCatalog(db: Database): Promise<Catalog> {
   const slugById = new Map(productRows.map((row) => [row.id, row.slug]));
   const onSale = new Set(catalogProducts.map((product) => product.slug));
   const categoryProducts: Record<string, string[]> = {};
-  for (const link of linkRows) {
+  // Inside a category: the hand-set position first, and newest first where that ties
+  // (which is where a product lands when it is first added to a category).
+  const addedAt = new Map(productRows.map((row) => [row.id, row.createdAt.getTime()]));
+  const ordered = [...linkRows].sort(
+    (a, b) =>
+      a.sortOrder - b.sortOrder ||
+      (addedAt.get(b.productId) ?? 0) - (addedAt.get(a.productId) ?? 0),
+  );
+  for (const link of ordered) {
     const category = categoryById.get(link.categoryId);
     const slug = slugById.get(link.productId);
     if (!category || !slug || !onSale.has(slug)) continue;

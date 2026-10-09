@@ -26,7 +26,10 @@ export type * from "./types";
 
 export async function getCatalog(): Promise<Catalog> {
   "use cache";
-  cacheLife("hours");
+  // Admin changes clear this straight away through the tag. The five minutes is a
+  // backstop: if a page happened to be rebuilding at the very moment of a change,
+  // it catches up by itself soon after.
+  cacheLife({ stale: 300, revalidate: 300, expire: 86_400 });
   cacheTag(CATALOG_TAG);
 
   // No database yet (a fresh local checkout): show the sample products.

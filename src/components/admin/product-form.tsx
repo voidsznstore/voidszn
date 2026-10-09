@@ -671,7 +671,11 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
               </label>
             ))}
             {draft.id && draft.isActive ? (
-              <Link href={`/products/${draft.slug}`} className="text-sm underline underline-offset-4">
+              <Link
+                href={`/products/${draft.slug}`}
+                prefetch={false}
+                className="text-sm underline underline-offset-4"
+              >
                 View on the store
               </Link>
             ) : null}

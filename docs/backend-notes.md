@@ -5,25 +5,47 @@ file whenever a decision is made that the backend has to honor.
 
 ## Categories: sort and filter by category (requested by the owner)
 
-The admin must be able to sort and filter by category everywhere products appear.
+The admin must be able to sort and filter by category everywhere products appear. Built:
 
-- **Admin product list:** filter by category (product type and interest), and sort by
-  category name. Show each product's categories as a column.
-- **Admin order and sales views:** filter and group sales by category, so it is clear
-  which categories sell.
-- **Category management:** create, rename, reorder and hide categories of both kinds.
-  Drag to reorder categories (`categories.sort_order`) and to reorder products inside a
-  category (`product_categories.sort_order`).
-- **Product form:** pick exactly one product type and any number of interests.
-- **Storefront:** category pages already exist at `/collections/[slug]` and sort by
-  featured, newest and price. Swap `src/lib/catalog.ts` for database queries; keep the
-  same function names so pages do not change.
-
-The schema is ready for this: `categories.kind` (PRODUCT_TYPE or INTEREST) and the
-`product_categories` join table, with an index on `(category_id, sort_order)`.
+- **Admin product list** (`/admin/products`): filter by any category (product type or
+  interest), sort by category, and each product's type and interests shown as columns.
+- **Admin orders** (`/admin/orders`): filter to orders containing a product from a
+  category.
+- **Sales** (`/admin/sales`): what sold by product type and by interest over a chosen
+  period. Each category links to its orders.
+- **Category management** (`/admin/categories`): create, rename, hide and delete
+  categories of both kinds. Drag (or use the arrow buttons) to reorder categories
+  (`categories.sort_order`) and to reorder products inside a category
+  (`product_categories.sort_order`).
+- **Product form:** exactly one product type and any number of interests.
+- **Storefront:** category pages at `/collections/[slug]`, in the category's own order.
 
 "Best Sellers" and "Just In" are not categories. They are automatic lists: best sellers
-ranked from paid order items over a recent window, just in ordered by `products.created_at`.
+ranked from paid order items over the last 90 days (newest fills in until there are
+sales), just in ordered by `products.created_at`.
+
+## The admin
+
+- **Sign-in:** `/admin/login`. Sessions are random tokens in an httpOnly cookie, stored
+  hashed in `admin_sessions`. Passwords are hashed with scrypt. Repeated bad sign-ins
+  are slowed down (`admin_login_attempts`).
+- **First account:** created through a one-time link (`/admin/setup?code=...`). Only the
+  hash of the code is in the database. The link dies once an admin exists or after 14
+  days. To issue a new one, add a migration like `drizzle/0002_admin_setup_link.sql`
+  with a fresh hash. There is no password reset by email yet.
+- **Every admin page and action calls `requireAdmin()`.** The request proxy
+  (`src/proxy.ts`) only checks that a cookie is present, as a fast first filter.
+- **Products:** one price per product with optional per-size prices. Every color and
+  size pair is a variant row. Photos are shrunk in the browser, uploaded through
+  `/api/admin/uploads` and stored in R2 (`src/lib/storage.ts`).
+- **Orders:** worked by hand for now: mark as sent to the printer, then shipped with
+  tracking, then delivered. Every change is written to the order's history with who
+  did it. The store does not email customers yet; the order page has a ready-written
+  tracking email that opens in the owner's mail app.
+- **Cancelling an order does not refund it.** Refund in Square first.
+
+Not built yet: refunds from the admin, order emails, password reset, staff accounts,
+discount codes, the fulfilment connection to the printer.
 
 ## Forms that need the backend
 

@@ -32,7 +32,12 @@ export default function PanelLayout({ children }: LayoutProps<"/admin">) {
           <Suspense fallback={null}>
             <Identity />
           </Suspense>
-          <Link href="/" className="inline-flex min-h-11 items-center text-smoke underline underline-offset-4 hover:text-bone">
+          {/* Not prefetched: store pages shouldn't be rebuilt just because the admin is open. */}
+          <Link
+            href="/"
+            prefetch={false}
+            className="inline-flex min-h-11 items-center text-smoke underline underline-offset-4 hover:text-bone"
+          >
             View store
           </Link>
         </div>

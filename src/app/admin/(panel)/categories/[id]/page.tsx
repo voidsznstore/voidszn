@@ -38,7 +38,11 @@ async function Category({ params }: Pick<PageProps<"/admin/categories/[id]">, "p
         <h1 className="display text-4xl text-white">{category.name}</h1>
         <p className="text-sm text-smoke">
           {category.kind === "PRODUCT_TYPE" ? "Product type" : "Interest"} · on the store at{" "}
-          <Link href={`/collections/${category.slug}`} className="underline underline-offset-4">
+          <Link
+            href={`/collections/${category.slug}`}
+            prefetch={false}
+            className="underline underline-offset-4"
+          >
             /collections/{category.slug}
           </Link>
         </p>

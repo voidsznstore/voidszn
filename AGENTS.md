@@ -16,4 +16,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   pixels or anything else with legal requirements.
 - Business details and policy terms live in `src/lib/site-config.ts`. Never hard-code a
   shipping time, return window or contact detail anywhere else.
-- `src/lib/catalog.ts` is sample data standing in for the database.
+- The catalog lives in the database and is managed in the admin (`/admin`). Storefront
+  code reads it through `src/lib/catalog` (cached, cleared by `CATALOG_TAG`). Checkout
+  reads prices straight from the database. `src/lib/catalog/sample.ts` is only a fallback
+  for running without a database.
+- Every admin page and every admin server action must call `requireAdmin()` first.
+- Admin pages keep their state when you navigate away (the framework hides them instead
+  of unmounting). Key forms on their data or on `useRouter().bfcacheId` so a fresh visit
+  starts clean.

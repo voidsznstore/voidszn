@@ -146,7 +146,8 @@ export async function getCategory(db: Database, id: string): Promise<CategoryDet
     .from(productCategories)
     .innerJoin(products, eq(products.id, productCategories.productId))
     .where(eq(productCategories.categoryId, id))
-    .orderBy(asc(productCategories.sortOrder), asc(products.name));
+    // Same order the store uses: position, then newest first.
+    .orderBy(asc(productCategories.sortOrder), desc(products.createdAt));
   return { ...category, products: rows };
 }
 

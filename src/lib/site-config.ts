@@ -21,6 +21,8 @@ export const siteConfig = {
   legalEmail: "legal@voidszn.com",
   /** State whose law governs the terms. */
   governingState: "[GOVERNING STATE]",
+  /** Time zone the admin shows order dates in. */
+  timeZone: "America/New_York",
   policiesUpdated: "October 8, 2026",
 
   shipping: {
