@@ -40,10 +40,6 @@ export function readSquareOrder(
   const paid = payment.amount_money?.amount;
 
   if (!email) return { problem: "no buyer email on the payment or the order" };
-  if (!address?.address_line_1) {
-    const types = (order.fulfillments ?? []).map((item) => item.type ?? "?").join(",") || "none";
-    return { problem: `no shipping address (fulfillments: ${types})` };
-  }
   if (total === undefined || paid === undefined) return { problem: "missing totals" };
   // Never treat a part payment as a paid order.
   if (paid < total) return { problem: `paid ${paid} of ${total}` };
@@ -73,8 +69,14 @@ export function readSquareOrder(
 
   const name =
     recipient?.display_name?.trim() ||
-    [address.first_name, address.last_name].filter(Boolean).join(" ") ||
+    [address?.first_name, address?.last_name].filter(Boolean).join(" ") ||
     null;
+
+  // A paid order is always saved. If Square sent no address back, it is saved
+  // without one and flagged, so someone gets it from the customer before it ships.
+  const attention = address?.address_line_1
+    ? []
+    : ["No shipping address came back from Square. Ask the customer for it before fulfilling."];
 
   return {
     order: {
@@ -92,14 +94,15 @@ export function readSquareOrder(
       totalCents: total,
       shippingName: name ?? email,
       shippingAddress: {
-        line1: address.address_line_1,
-        ...(address.address_line_2 ? { line2: address.address_line_2 } : {}),
-        city: address.locality ?? "",
-        state: address.administrative_district_level_1 ?? "",
-        postalCode: address.postal_code ?? "",
-        country: address.country ?? "",
+        line1: address?.address_line_1 ?? "",
+        ...(address?.address_line_2 ? { line2: address.address_line_2 } : {}),
+        city: address?.locality ?? "",
+        state: address?.administrative_district_level_1 ?? "",
+        postalCode: address?.postal_code ?? "",
+        country: address?.country ?? "",
       },
       shippingMethod: "Standard shipping",
+      ...(attention.length ? { attention } : {}),
       items,
     },
   };
@@ -117,7 +120,9 @@ export function orderFromSquare(
 export type Settled =
   | { status: "saved"; orderNumber: string | null; order: PaidOrderInput; receiptUrl: string | null }
   | { status: "not_paid" }
-  | { status: "not_ours" };
+  | { status: "not_ours" }
+  /** One of this site's orders was paid but could not be saved. Must be retried. */
+  | { status: "unreadable"; problem: string };
 
 /**
  * Saves the order for a payment, once. Called from the webhook and again when the
@@ -141,6 +146,7 @@ export async function settlePayment(paymentId: string, event: EventRef): Promise
       console.error(
         `[square] Paid order ${order.id} could not be saved: ${reading.problem}. Payment ${payment.id}.`,
       );
+      return { status: "unreadable", problem: reading.problem };
     }
     await recordEvent(db, event);
     return { status: "not_ours" };

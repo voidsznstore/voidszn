@@ -172,12 +172,11 @@ check("an unfinished, mismatched or part payment is not an order", () => {
   );
 });
 
-check("an order without an email, address or readable items is refused", () => {
+check("an order without an email or readable items is refused", () => {
   assert.equal(
     orderFromSquare(event, { ...payment, buyer_email_address: undefined }, { ...order, fulfillments: [] }),
     null,
   );
-  assert.equal(orderFromSquare(event, payment, { ...order, fulfillments: [] }), null);
   assert.equal(
     orderFromSquare(event, payment, { ...order, line_items: [{ ...order.line_items![0], metadata: {} }] }),
     null,
@@ -186,6 +185,14 @@ check("an order without an email, address or readable items is refused", () => {
     orderFromSquare(event, payment, { ...order, line_items: [{ ...order.line_items![0], quantity: "1.5" }] }),
     null,
   );
+});
+
+check("a paid order with no address is still saved, and flagged", () => {
+  const input = orderFromSquare(event, payment, { ...order, fulfillments: [{ type: "SHIPMENT" }] });
+  assert.ok(input);
+  assert.equal(input.shippingAddress.line1, "");
+  assert.equal(input.attention?.length, 1);
+  assert.equal(orderFromSquare(event, payment, order)?.attention, undefined);
 });
 
 async function orderChecks() {
@@ -212,7 +219,7 @@ async function orderChecks() {
     console.log("  ok  the first event creates the order");
     passed += 1;
 
-    assert.deepEqual(await recordPaidOrder(db, withEvent("evt_a")), { status: "duplicate_event" });
+    assert.deepEqual(await recordPaidOrder(db, withEvent("evt_a")), { status: "order_exists" });
     console.log("  ok  the same event again changes nothing");
     passed += 1;
 

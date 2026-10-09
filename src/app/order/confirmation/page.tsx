@@ -78,6 +78,7 @@ async function Confirmation({
   }
 
   if (settled.status === "not_paid") return <NotPaid />;
+  if (settled.status === "unreadable") return <Unconfirmed />;
   if (settled.status !== "saved") return <NotFound />;
 
   const { order, orderNumber, receiptUrl } = settled;

@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "../index";
 import {
   type Address,
@@ -28,6 +28,8 @@ export type PaidOrderInput = {
   shippingName: string;
   shippingAddress: Address;
   shippingMethod: string | null;
+  /** Anything a person needs to look at before this order ships. Shown on the order. */
+  attention?: string[];
   items: {
     slug: string;
     productName: string;
@@ -40,7 +42,6 @@ export type PaidOrderInput = {
 
 export type RecordResult =
   | { status: "created"; orderNumber: string }
-  | { status: "duplicate_event" }
   | { status: "order_exists" };
 
 // No 0, O, 1 or I, so a number read over the phone can't be misheard.
@@ -57,15 +58,15 @@ const skuFor = (slug: string, color: string, size: string) =>
 
 /**
  * Writes a paid order. Safe to call more than once for the same payment: the
- * event is recorded once, and the payment reference is unique, so a replayed or
- * second event for the same payment changes nothing.
+ * payment reference is unique, so a replayed or second event for the same payment
+ * changes nothing. The event itself is kept as a log entry.
  *
  * Everything happens in one transaction. If any part fails, nothing is saved and
  * the processor's retry starts clean.
  */
 export async function recordPaidOrder(db: Database, input: PaidOrderInput): Promise<RecordResult> {
   return db.transaction(async (tx) => {
-    const [event] = await tx
+    await tx
       .insert(webhookEvents)
       .values({
         provider: input.event.provider,
@@ -73,12 +74,18 @@ export async function recordPaidOrder(db: Database, input: PaidOrderInput): Prom
         type: input.event.type,
         payload: { paymentRef: input.paymentRef },
       })
-      .onConflictDoNothing()
-      .returning({ id: webhookEvents.id });
-    if (!event) return { status: "duplicate_event" };
+      .onConflictDoNothing();
 
     const markProcessed = () =>
-      tx.update(webhookEvents).set({ processedAt: new Date() }).where(eq(webhookEvents.id, event.id));
+      tx
+        .update(webhookEvents)
+        .set({ processedAt: new Date() })
+        .where(
+          and(
+            eq(webhookEvents.provider, input.event.provider),
+            eq(webhookEvents.eventId, input.event.id),
+          ),
+        );
 
     const email = input.email.trim().toLowerCase();
     const [customer] = await tx
@@ -143,12 +150,19 @@ export async function recordPaidOrder(db: Database, input: PaidOrderInput): Prom
       })),
     );
 
-    await tx.insert(orderEvents).values({
-      orderId: order.id,
-      type: "order.paid",
-      message: "Payment confirmed",
-      data: { provider: input.paymentProvider, event: input.event.id },
-    });
+    await tx.insert(orderEvents).values([
+      {
+        orderId: order.id,
+        type: "order.paid",
+        message: "Payment confirmed",
+        data: { provider: input.paymentProvider, event: input.event.id },
+      },
+      ...(input.attention ?? []).map((message) => ({
+        orderId: order.id,
+        type: "order.attention",
+        message,
+      })),
+    ]);
 
     await markProcessed();
     return { status: "created", orderNumber };

@@ -56,6 +56,10 @@ export async function POST(request: Request) {
       type: event.type ?? "payment.updated",
     });
     console.log(`[webhook] ${event.event_id}: ${result.status}`);
+    // Money was taken for one of our orders but it isn't saved. Have Square try again.
+    if (result.status === "unreadable") {
+      return new Response("Could not save the order", { status: 500 });
+    }
   } catch (error) {
     console.error(`[webhook] ${event.event_id}: failed`, error);
     return new Response("Could not process event", { status: 500 });
