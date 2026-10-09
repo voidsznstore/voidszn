@@ -130,6 +130,33 @@ export const adminUsers = pgTable("admin_users", {
   updatedAt: updatedAt(),
 });
 
+/** A signed-in admin. The cookie holds a random token; only its hash is stored. */
+export const adminSessions = pgTable(
+  "admin_sessions",
+  {
+    id: id(),
+    adminId: uuid("admin_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    createdAt: createdAt(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("admin_sessions_admin_idx").on(t.adminId)],
+);
+
+/** Failed sign-ins, kept briefly so repeated guessing can be slowed down. */
+export const adminLoginAttempts = pgTable(
+  "admin_login_attempts",
+  {
+    id: id(),
+    /** What the attempt is counted against: "email:<address>" or "ip:<address>". */
+    key: text("key").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("admin_login_attempts_key_idx").on(t.key, t.createdAt)],
+);
+
 export const storeSettings = pgTable("store_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),

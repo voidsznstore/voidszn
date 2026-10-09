@@ -133,6 +133,25 @@
     font-weight: 600;
   }
 
+  /* Text fields, used in the admin */
+  .input {
+    width: 100%;
+    min-height: 2.875rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-line-strong);
+    background: var(--color-ash-soft);
+    color: var(--color-bone);
+    font-size: 1rem;
+  }
+
+  .input::placeholder {
+    color: var(--color-smoke);
+  }
+
+  .input:hover {
+    border-color: var(--color-smoke);
+  }
+
   .btn {
     display: inline-flex;
     align-items: center;
