@@ -11,7 +11,7 @@ import { config } from "dotenv";
 config({ path: [".env.local", ".env"] });
 
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { eq, inArray, isNull, like } from "drizzle-orm";
 import { getDb } from "../src/db";
 import { addExpense, addRecurring, endRecurring, loadFacts, setOrderCost } from "../src/db/queries/accounting";
@@ -52,6 +52,7 @@ import {
 import { earnedIn, shareOf, shareOn, statementFor } from "../src/lib/accounting/payouts";
 import { FL_SURTAX_BPS, federalSetAside, floridaCounty, floridaSalesTax } from "../src/lib/accounting/tax";
 import { parseDollars } from "../src/lib/money";
+import { isFromStripe } from "../src/lib/payments/stripe";
 
 let passed = 0;
 function ok(label: string) {
@@ -285,6 +286,50 @@ function sums() {
   // Set twice on the same day: the later setting is the one that counts.
   assert.equal(shareOn([...changed, { shareBps: 4000, effectiveOn: "2026-10-01", createdAt: 3 }], "2026-10-05"), 4000);
   ok("a changed share applies from its day on and leaves earlier profit alone");
+
+  /* ---- Card payout fees ---- */
+  const paidOut = summarize(
+    buildBooks(
+      facts({
+        orders: [order({})],
+        cardPayouts: [
+          { at: new Date("2026-10-06T16:00:00Z"), amountCents: 10_000, adminId: "a" },
+          { at: new Date("2026-10-07T16:00:00Z"), amountCents: 4_000, adminId: "a" },
+          { at: new Date("2026-10-07T16:00:00Z"), amountCents: 4_000, adminId: "b" },
+        ],
+      }),
+      NOW,
+    ),
+  );
+  // 1.25% + 25c each ($1.50, $0.75, $0.75), and $2 once for each partner paid this month.
+  assert.equal(paidOut.expenses.PAYOUTS, 150 + 75 + 75 + 200 + 200);
+  assert.equal(paidOut.netProfitCents, 2244 - 700);
+  const free = buildBooks(
+    facts({
+      orders: [order({})],
+      cardPayouts: [{ at: new Date("2026-10-06T16:00:00Z"), amountCents: 10_000, adminId: "a" }],
+      assumptions: { ...DEFAULT_ASSUMPTIONS, payoutFeeBps: 0, payoutFeeFixedCents: 0, payoutAccountCents: 0 },
+    }),
+    NOW,
+  );
+  assert.equal(summarize(free).netProfitCents, 2244);
+  ok("what Stripe charges for card payouts is a cost of the business, once per payout and once per partner a month");
+
+  /* ---- Events from Stripe ---- */
+  process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
+  const stamp = 1_800_000_000;
+  const body = '{"type":"payout.failed"}';
+  const good = createHmac("sha256", "whsec_test").update(`${stamp}.${body}`).digest("hex");
+  assert.equal(isFromStripe(body, `t=${stamp},v1=${good}`, stamp * 1000), true);
+  assert.equal(isFromStripe(body, `t=${stamp},v1=${"0".repeat(64)},v1=${good}`, stamp * 1000), true); // a rotated secret sends two
+  assert.equal(isFromStripe(`${body} `, `t=${stamp},v1=${good}`, stamp * 1000), false);
+  assert.equal(isFromStripe(body, `t=${stamp},v1=${good}`, (stamp + 301) * 1000), false);
+  assert.equal(isFromStripe(body, `t=${stamp + 1},v1=${good}`, stamp * 1000), false);
+  assert.equal(isFromStripe(body, `v1=${good}`, stamp * 1000), false);
+  assert.equal(isFromStripe(body, null, stamp * 1000), false);
+  delete process.env.STRIPE_WEBHOOK_SECRET;
+  assert.equal(isFromStripe(body, `t=${stamp},v1=${good}`, stamp * 1000), false);
+  ok("an event counts as Stripe's only with a matching, fresh signature");
 
   assert.equal(parseDollars("$1,250.5"), 125050);
   assert.equal(parseDollars("12.345"), null);

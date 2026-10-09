@@ -86,7 +86,7 @@ export function PayoutReceipt({
             grand
             note={
               statement.balanceCents < 0
-                ? `Behind by $${(-statement.balanceCents / 100).toFixed(2)}: refunds or costs came in after the last cash-out. New profit covers that first.`
+                ? `Behind by $${(-statement.balanceCents / 100).toFixed(2)}: costs came in after the last cash-out. New profit covers that first.`
                 : undefined
             }
           />

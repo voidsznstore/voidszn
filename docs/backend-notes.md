@@ -99,9 +99,55 @@ sales), just in ordered by `products.created_at`.
     order would be counted as pure profit.
   - Because profit is recomputed, a refund or cost that arrives after a cash-out
     takes the balance below zero. Available stays $0 until new profit covers it.
-  - Money is sent by hand for now (`method = "manual"`); the partner says where in
-    `admin_users.payout_handle`. Never store a card or bank number. A card payout
-    service would plug in at `requestPayout` and the "Where it goes" panel.
+  - **To a card** (`method = "card"`, `src/lib/payouts/card.ts`,
+    `src/lib/payments/stripe.ts`): on when `STRIPE_SECRET_KEY` is set. Each partner
+    has a Stripe connected account (Accounts v2, recipient configuration, Express
+    dashboard, the store liable for fees and losses). Stripe's hosted form takes
+    their identity and debit card; this site only ever stores the account id and
+    shows the card's brand and last four digits. Set-up steps for the owner are in
+    `docs/card-payouts.md`.
+  - A cash-out is decided first (`requestPayout`, as above) and then sent:
+    a transfer from the store's Stripe balance to the partner's account, then an
+    instant payout from there to their card. Before each step `sendToCard` asks
+    Stripe whether that step was already done for this cash-out (transfers by
+    `transfer_group`, payouts by `metadata.payout_id`), so a try cut off half-way
+    is picked up, never repeated. Nothing in this path can change an amount.
+  - The rule for one cash-out: the money either reaches the card once and the row
+    is SENT, or it is back in the store's Stripe balance and the row is still
+    REQUESTED or CANCELLED. Never both, never neither.
+  - Only one send works on a cash-out at a time (`claimForCard`, `card_claimed_at`).
+    Every write is fenced on that claim. A clear refusal releases it at once; a
+    timeout or a dropped reply keeps it for `CLAIM_MINUTES`, because the step may
+    have gone through.
+  - The partner's Stripe account is kept on a manual payout schedule
+    (`ensureManualPayouts`, checked before any money moves). On an automatic
+    schedule Stripe would pay a transfer out by itself, a second time.
+  - If the card can't be paid (the Stripe balance is short, the card isn't ready,
+    Stripe refuses), the transfer is taken back and the cash-out stays REQUESTED
+    with the reason in `provider_error`. The master account can press "Send to
+    card" again or send it by hand and mark it sent.
+  - "Mark as sent" and "Cancel it" call `clearOfCard` first, and the queries
+    refuse while a transfer is noted or a send is running (`freeOfCard`). If an
+    earlier try did reach the card, the row becomes SENT by card instead; if a
+    transfer is sitting in their Stripe account, it is taken back first.
+  - A payout that bounces after it was sent is found by the timed job, which
+    follows every card payout for 7 days, even one Stripe has called paid (and by
+    the webhook at `/api/webhooks/stripe`, when its secret is set): the transfer
+    is reversed, the payout becomes CANCELLED, the amount is back on the balance
+    and both the partner and the master account are emailed.
+  - `admin_users.stripe_livemode` records whether the account was made with a live
+    or a test key. An account from the other mode is ignored, and a real account
+    is never replaced by a test one. With a **test key** everything is a practice
+    run: Stripe's test mode is exercised, but the cash-out is never marked SENT
+    and settling by hand skips Stripe.
+  - The store's Stripe balance only holds what the owner adds to it, because
+    customers pay through Square.
+  - Stripe's charges for card payouts are counted as a business cost
+    (`buildBooks`, category PAYOUTS), from the stand-in figures on the Accounting
+    screen. That category is worked out, so the expense forms don't offer it.
+  - **By hand** (`method = "manual"`): when card payouts are off, or as the
+    fallback. The partner says where in `admin_users.payout_handle`. Never store a
+    card or bank number.
 - **Banner** (`/admin/banner`): the moving strip under the store's header. The owner
   sets up to six lines, the color of the words, and whether it shows at all. It is one
   row in `settings` (`store.banner`), read through `src/lib/banner` (cached, cleared by

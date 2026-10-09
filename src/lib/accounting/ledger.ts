@@ -59,6 +59,9 @@ export type RecurringFact = {
   endsOn: Day | null;
 };
 
+/** A payout that went to a partner's card through Stripe. Stripe bills the store for each one. */
+export type CardPayoutFact = { at: Date; amountCents: number; adminId: string };
+
 /** Figures used only when the real one isn't known yet. */
 export type Assumptions = {
   /** The card fee, until the processor reports the real one: a percentage plus a fixed amount. */
@@ -66,16 +69,34 @@ export type Assumptions = {
   feeFixedCents: number;
   /** What the printer charges to ship one order, on top of the items. */
   shipCostCents: number;
+  /** What Stripe charges the store for each payout to a card: a percentage plus a fixed amount. */
+  payoutFeeBps: number;
+  payoutFeeFixedCents: number;
+  /** What Stripe charges for each partner who is paid by card in a month. */
+  payoutAccountCents: number;
 };
 
-/** Square's rate for payments taken through its online API: 2.9% + 30¢. */
-export const DEFAULT_ASSUMPTIONS: Assumptions = { feeBps: 290, feeFixedCents: 30, shipCostCents: 0 };
+/**
+ * Square's rate for payments taken through its online API: 2.9% + 30¢.
+ * Stripe's rates for paying a partner's card: 1% for an instant payout plus
+ * 0.25% + 25¢ for the payout itself, and $2 for each partner paid in the month.
+ */
+export const DEFAULT_ASSUMPTIONS: Assumptions = {
+  feeBps: 290,
+  feeFixedCents: 30,
+  shipCostCents: 0,
+  payoutFeeBps: 125,
+  payoutFeeFixedCents: 25,
+  payoutAccountCents: 200,
+};
 
 export type Facts = {
   orders: OrderFact[];
   refunds: RefundFact[];
   expenses: ExpenseFact[];
   recurring: RecurringFact[];
+  /** Payouts sent to cards. Left out where there are none. */
+  cardPayouts?: CardPayoutFact[];
   assumptions: Assumptions;
 };
 
@@ -244,6 +265,27 @@ export function buildBooks(facts: Facts, now: Date = new Date()): Books {
         category: cost.category,
         amountCents: -cost.amountCents,
         label: `${cost.name} (${cost.every === "YEAR" ? "yearly" : "monthly"})`,
+      });
+    }
+  }
+
+  // What Stripe charges for paying partners by card. A cost of the business like
+  // any other, so it comes off the profit everyone shares.
+  const paidThisMonth = new Set<string>();
+  for (const payout of [...(facts.cardPayouts ?? [])].sort((a, b) => a.at.getTime() - b.at.getTime())) {
+    const day = dayOf(payout.at);
+    const ref = { day, at: payout.at.getTime(), kind: "expense" as const, category: "PAYOUTS", estimated: true };
+    const fee =
+      Math.round((payout.amountCents * facts.assumptions.payoutFeeBps) / 10_000) +
+      facts.assumptions.payoutFeeFixedCents;
+    if (fee > 0) lines.push({ ...ref, amountCents: -fee, label: "Stripe fee for a card payout" });
+    const key = `${payout.adminId}:${monthOf(day)}`;
+    if (!paidThisMonth.has(key) && facts.assumptions.payoutAccountCents > 0) {
+      paidThisMonth.add(key);
+      lines.push({
+        ...ref,
+        amountCents: -facts.assumptions.payoutAccountCents,
+        label: "Stripe fee for a partner paid by card this month",
       });
     }
   }

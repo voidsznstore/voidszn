@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { connection } from "next/server";
 import { getDb } from "@/db";
 import { getSquareStatus } from "@/lib/payments/square";
+import { getStripeStatus } from "@/lib/payments/stripe";
 import { checkEmail } from "@/lib/email/send";
 import { checkInbox } from "@/lib/mail/gmail";
 import { checkStorage, checkUpload } from "@/lib/storage";
@@ -16,8 +17,9 @@ export async function GET() {
   // Always answer from the live database, never from a prerendered copy.
   await connection();
 
-  const [square, images, upload, email, inbox] = await Promise.all([
+  const [square, cardPayouts, images, upload, email, inbox] = await Promise.all([
     getSquareStatus(),
+    getStripeStatus(),
     checkStorage(),
     checkUpload(),
     checkEmail(),
@@ -29,6 +31,8 @@ export async function GET() {
     upload,
     email: email.status,
     inbox,
+    // Stripe, for paying partners to their cards.
+    cardPayouts,
     // DNS records are public by nature, so listing the ones still needed gives nothing away.
     ...(email.dns ? { emailDns: email.dns } : {}),
   };

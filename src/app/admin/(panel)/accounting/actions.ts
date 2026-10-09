@@ -42,7 +42,7 @@ export async function addExpenseAction(_previous: MoneyFormState, form: FormData
   if (!isDay(spentOn)) return { error: "Pick the day it was spent." };
   if (spentOn > dayOf(new Date())) return { error: "That day hasn't happened yet." };
   if (spentOn < EARLIEST_DAY) return { error: "Check the year on that date." };
-  if (!isExpenseCategory(category)) return { error: "Pick what kind of expense it is." };
+  if (!isExpenseCategory(category) || category === "PAYOUTS") return { error: "Pick what kind of expense it is." };
   if (amountCents === null || amountCents <= 0) return { error: "Enter the amount as a number, like 25 or 25.50." };
   if (!description) return { error: "Say what it was for." };
   if (description.length > 200) return { error: "Keep the description under 200 characters." };
@@ -80,7 +80,7 @@ export async function addRecurringAction(_previous: MoneyFormState, form: FormDa
 
   if (!name) return { error: "Say what it is, like Vercel or Canva." };
   if (name.length > 100) return { error: "Keep the name under 100 characters." };
-  if (!isExpenseCategory(category)) return { error: "Pick what kind of cost it is." };
+  if (!isExpenseCategory(category) || category === "PAYOUTS") return { error: "Pick what kind of cost it is." };
   if (amountCents === null || amountCents <= 0) return { error: "Enter the amount as a number, like 20 or 19.99." };
   if (every !== "MONTH" && every !== "YEAR") return { error: "Pick monthly or yearly." };
   if (!isDay(startsOn)) return { error: "Pick the day of the first charge." };
@@ -125,10 +125,22 @@ export async function saveAssumptionsAction(_previous: MoneyFormState, form: For
   if (fixed === null || fixed > 1000) return { error: "Enter the fixed part of the card fee, like 0.30." };
   if (ship === null) return { error: "Enter the printer's shipping charge as a number, or leave it empty." };
 
+  const payoutPercent = Number(text(form, "payoutPercent"));
+  const payoutFixed = parseDollars(text(form, "payoutFixed") || "0");
+  const payoutAccount = parseDollars(text(form, "payoutAccount") || "0");
+  if (!Number.isFinite(payoutPercent) || payoutPercent < 0 || payoutPercent > 20) {
+    return { error: "The card payout fee is a percentage between 0 and 20." };
+  }
+  if (payoutFixed === null || payoutFixed > 1000) return { error: "Enter the fixed part of the payout fee, like 0.25." };
+  if (payoutAccount === null || payoutAccount > 10_000) return { error: "Enter the monthly fee per partner, like 2.00." };
+
   await saveAssumptions(getDb(), {
     feeBps: Math.round(percent * 100),
     feeFixedCents: fixed,
     shipCostCents: ship,
+    payoutFeeBps: Math.round(payoutPercent * 100),
+    payoutFeeFixedCents: payoutFixed,
+    payoutAccountCents: payoutAccount,
   });
   refresh();
   return { done: "Saved." };

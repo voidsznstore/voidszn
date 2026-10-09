@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Database } from "../index";
-import { expenses, orderEvents, orderItems, orders, recurringCosts } from "../schema";
+import { expenses, orderEvents, orderItems, orders, partnerPayouts, recurringCosts } from "../schema";
 import { type ExpenseCategory, isExpenseCategory } from "@/lib/accounting/categories";
 import type { Day } from "@/lib/accounting/days";
 import {
@@ -33,6 +33,9 @@ export async function getAssumptions(db: Database): Promise<Assumptions> {
       feeBps: whole(value.feeBps, DEFAULT_ASSUMPTIONS.feeBps, 2000),
       feeFixedCents: whole(value.feeFixedCents, DEFAULT_ASSUMPTIONS.feeFixedCents, 1000),
       shipCostCents: whole(value.shipCostCents, DEFAULT_ASSUMPTIONS.shipCostCents, 100_000),
+      payoutFeeBps: whole(value.payoutFeeBps, DEFAULT_ASSUMPTIONS.payoutFeeBps, 2000),
+      payoutFeeFixedCents: whole(value.payoutFeeFixedCents, DEFAULT_ASSUMPTIONS.payoutFeeFixedCents, 1000),
+      payoutAccountCents: whole(value.payoutAccountCents, DEFAULT_ASSUMPTIONS.payoutAccountCents, 10_000),
     };
   } catch {
     return DEFAULT_ASSUMPTIONS;
@@ -108,6 +111,10 @@ export async function loadFacts(db: Database): Promise<Facts> {
   const expenseRows = await db.select().from(expenses);
   const recurringRows = await db.select().from(recurringCosts);
   const assumptions = await getAssumptions(db);
+  const cardRows = await db
+    .select({ at: partnerPayouts.sentAt, amountCents: partnerPayouts.amountCents, adminId: partnerPayouts.adminId })
+    .from(partnerPayouts)
+    .where(and(eq(partnerPayouts.method, "card"), eq(partnerPayouts.status, "SENT"), isNotNull(partnerPayouts.sentAt)));
 
   const orderFacts: OrderFact[] = orderRows.map((row) => ({
     orderNumber: row.orderNumber,
@@ -149,7 +156,8 @@ export async function loadFacts(db: Database): Promise<Facts> {
     endsOn: row.endsOn,
   }));
 
-  return { orders: orderFacts, refunds, expenses: expenseFacts, recurring, assumptions };
+  const cardPayouts = cardRows.map((row) => ({ at: row.at as Date, amountCents: row.amountCents, adminId: row.adminId }));
+  return { orders: orderFacts, refunds, expenses: expenseFacts, recurring, cardPayouts, assumptions };
 }
 
 /* ------------------------------------------------------------------ */

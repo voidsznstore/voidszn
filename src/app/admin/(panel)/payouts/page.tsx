@@ -3,9 +3,11 @@ import { Suspense } from "react";
 import { MoneyRow, MoneyRows } from "@/components/admin/money-rows";
 import { Loading, PageHeader } from "@/components/admin/page-header";
 import {
+  AddCardButton,
   AdjustForm,
   CashOutButton,
   HandleForm,
+  ManageCardButton,
   SettlePayoutForm,
   ShareForm,
   TaxRateForm,
@@ -19,15 +21,20 @@ import { FEDERAL, federalSetAside } from "@/lib/accounting/tax";
 import { formatDateTime } from "@/lib/admin/format";
 import { isMaster, requireAdmin } from "@/lib/admin/session";
 import { formatMoney } from "@/lib/money";
+import { getStoreBalance, isStripeConfigured } from "@/lib/payments/stripe";
+import { type CardStatus, cardStatusFor } from "@/lib/payouts/card";
+import { getAssumptions } from "@/db/queries/accounting";
 
 export const metadata: Metadata = { title: "Payouts" };
 
-export default function PayoutsPage() {
+type Props = PageProps<"/admin/payouts">;
+
+export default function PayoutsPage({ searchParams }: Props) {
   return (
     <>
       <PageHeader title="Payouts" />
       <Suspense fallback={<Loading />}>
-        <Payouts />
+        <Payouts searchParams={searchParams} />
       </Suspense>
     </>
   );
@@ -39,6 +46,14 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   REQUESTED: { label: "Waiting to be sent", tone: "tag-warn" },
   SENT: { label: "Sent", tone: "tag-good" },
   CANCELLED: { label: "Cancelled", tone: "tag-mute" },
+};
+
+/** Where Stripe says a card payout has got to, in plain words. */
+const CARD_PROGRESS: Record<string, string> = {
+  pending: "On its way to the card. Usually within 30 minutes.",
+  in_transit: "On its way to the card. Usually within 30 minutes.",
+  paid: "Arrived on the card.",
+  failed: "The card payout failed. See the note.",
 };
 
 const RATES = FEDERAL.brackets.map((bracket) => ({
@@ -70,6 +85,12 @@ function PayoutLine({ payout, who }: { payout: Payout; who?: string }) {
             {payout.destination ? ` · to ${payout.destination}` : ""}
           </p>
           {payout.note ? <p className="text-[0.8125rem] text-bone-dim">{payout.note}</p> : null}
+          {payout.method === "card" && payout.status === "SENT" ? (
+            <p className="text-[0.8125rem] text-bone-dim">{CARD_PROGRESS[payout.providerStatus ?? ""] ?? "Sent to the card."}</p>
+          ) : null}
+          {payout.status === "REQUESTED" && payout.providerError ? (
+            <p className="text-[0.8125rem] text-ember">Not sent to the card yet: {payout.providerError}</p>
+          ) : null}
         </div>
         <span className={`tag ${status.tone}`}>{status.label}</span>
       </div>
@@ -85,22 +106,46 @@ function PayoutLine({ payout, who }: { payout: Payout; who?: string }) {
   );
 }
 
-async function Payouts() {
+async function Payouts({ searchParams }: Pick<Props, "searchParams">) {
   const admin = await requireAdmin();
-  const { books, today, partners } = await loadPayoutState(getDb());
+  const { card: cardParam } = await searchParams;
+  const db = getDb();
+  const { books, today, partners } = await loadPayoutState(db);
   const me = partners.find((partner) => partner.id === admin.id);
   const master = isMaster(admin);
   const year = yearOf(today);
+  const cardsOn = isStripeConfigured();
+  const [card, assumptions, store] = await Promise.all([
+    cardStatusFor({ stripeAccountId: me?.stripeAccountId ?? null, stripeLivemode: me?.stripeLivemode ?? null }),
+    getAssumptions(db),
+    // What the store's Stripe balance can pay out, for the master account's eyes only.
+    master && cardsOn ? getStoreBalance().catch(() => null) : null,
+  ]);
+  // Roughly what Stripe will charge the business if this person cashes out to their card now.
+  const feeFor = (cents: number) =>
+    Math.round((cents * assumptions.payoutFeeBps) / 10_000) + assumptions.payoutFeeFixedCents;
 
   return (
     <div className="flex flex-col gap-8">
-      {me && me.shares.length > 0 ? <Mine me={me} books={books} today={today} year={year} /> : (
+      {cardParam === "problem" ? (
+        <p className="notice max-w-2xl px-4 py-3 text-sm">
+          Stripe couldn&apos;t open the card form just now. Try again from &ldquo;Where it goes&rdquo; below.
+        </p>
+      ) : null}
+      {cardParam === "done" && card.state === "ready" && !card.practice ? (
+        <p className="notice max-w-2xl px-4 py-3 text-sm">
+          {card.card.label} is connected. Your cash-outs go straight to it from now on.
+        </p>
+      ) : null}
+      {me && me.shares.length > 0 ? (
+        <Mine me={me} books={books} today={today} year={year} card={card} fee={formatMoney(feeFor(me.statement.availableCents))} />
+      ) : (
         <p className="notice max-w-2xl px-4 py-3 text-sm">
           This account doesn&apos;t have a share of the profit yet.
           {master ? " Set one below." : " The master account sets it."}
         </p>
       )}
-      {master ? <Everyone partners={partners} meId={admin.id} /> : null}
+      {master ? <Everyone partners={partners} meId={admin.id} cardsOn={cardsOn} store={store} /> : null}
     </div>
   );
 }
@@ -110,11 +155,15 @@ function Mine({
   books,
   today,
   year,
+  card,
+  fee,
 }: {
   me: Partner;
   books: Awaited<ReturnType<typeof loadPayoutState>>["books"];
   today: string;
   year: number;
+  card: CardStatus;
+  fee: string;
 }) {
   const s = me.statement;
   const costsMissing = s.summary.ordersWithoutCost;
@@ -145,11 +194,16 @@ function Mine({
               the printer&apos;s bill on the order. The Accounting screen shows which.
             </p>
           ) : null}
-          <CashOutButton amount={formatMoney(s.availableCents)} disabled={!canCashOut} />
+          <CashOutButton
+            amount={formatMoney(s.availableCents)}
+            disabled={!canCashOut}
+            card={card.state === "ready" && !card.practice ? card.card.label : undefined}
+            fee={card.state === "ready" && !card.practice ? fee : undefined}
+          />
           <p className="text-[0.8125rem] text-smoke">
             Cashing out takes the whole balance and sets it back to $0.00. It fills up again with every sale.
             {s.balanceCents < 0
-              ? ` You are ${formatMoney(-s.balanceCents)} behind, because refunds or costs came in after your last cash-out. New profit covers that first.`
+              ? ` You are ${formatMoney(-s.balanceCents)} behind, because costs came in after your last cash-out${card.state === "off" ? "" : " (Stripe's fee for a card payout is one)"}. New profit covers that first.`
               : ""}
           </p>
         </section>
@@ -158,15 +212,52 @@ function Mine({
           <div>
             <h2 className="text-xl font-semibold text-white">Where it goes</h2>
             <p className="text-sm text-smoke">
-              Instant payouts to a card aren&apos;t switched on yet. Until they are, a cash-out goes to the master
-              account to send by hand, and shows here as sent once it has gone.
+              {card.state === "off"
+                ? "Instant payouts to a card aren't switched on yet. Until they are, a cash-out goes to the master account to send by hand, and shows here as sent once it has gone."
+                : "A cash-out goes straight to your debit card through Stripe, usually within 30 minutes. Stripe checks who you are and holds the card. This site never sees the number."}
             </p>
           </div>
-          <div className="well flex items-center justify-between gap-4 !rounded-field px-4 py-3">
-            <span className="text-sm text-bone-dim">Debit card</span>
-            <span className="tag tag-mute">Not connected</span>
+          <div className="well flex flex-wrap items-center justify-between gap-x-4 gap-y-2 !rounded-field px-4 py-3">
+            <span className="text-sm text-bone-dim">
+              {card.state === "ready" ? <span className="num text-bone">{card.card.label}</span> : "Debit card"}
+            </span>
+            {card.state === "ready" ? (
+              <span className={`tag ${card.practice ? "tag-warn" : "tag-good"}`}>{card.practice ? "Test mode" : "Instant"}</span>
+            ) : card.state === "unfinished" ? (
+              <span className="tag tag-warn">Not finished</span>
+            ) : card.state === "unknown" ? (
+              <span className="tag tag-warn">Can&apos;t reach Stripe</span>
+            ) : (
+              <span className="tag tag-mute">Not connected</span>
+            )}
           </div>
-          <HandleForm handle={me.payoutHandle ?? ""} />
+          {card.state === "unfinished" ? <p className="text-sm text-bone-dim">{card.reason}</p> : null}
+          {card.state === "ready" && card.practice ? (
+            <p className="text-sm text-bone-dim">
+              Stripe is in test mode, so this is a practice card. A cash-out is run through Stripe to check it works,
+              but no real money moves and it stays waiting to be sent by hand.
+            </p>
+          ) : null}
+          {card.state === "unknown" ? (
+            <p className="text-sm text-bone-dim">
+              Stripe didn&apos;t answer just now. Reload the page in a moment. A cash-out made meanwhile waits to be
+              sent.
+            </p>
+          ) : null}
+          {card.state === "none" ? <AddCardButton label="Add a debit card" /> : null}
+          {card.state === "unfinished" ? <AddCardButton label="Continue with Stripe" /> : null}
+          {card.state === "ready" ? <ManageCardButton /> : null}
+          <div className="border-t border-line pt-4">
+            <HandleForm
+              handle={me.payoutHandle ?? ""}
+              label={card.state === "off" ? "Where to send it for now" : "Where to send it by hand"}
+            />
+            {card.state !== "off" ? (
+              <p className="pt-2 text-[0.8125rem] text-smoke">
+                Only used if a payout can&apos;t go to your card and has to be sent by hand.
+              </p>
+            ) : null}
+          </div>
         </section>
 
         <section className={panel}>
@@ -229,7 +320,17 @@ function Mine({
 }
 
 /** The master account's view: everyone's balance, and the controls to change them. */
-function Everyone({ partners, meId }: { partners: Partner[]; meId: string }) {
+function Everyone({
+  partners,
+  meId,
+  cardsOn,
+  store,
+}: {
+  partners: Partner[];
+  meId: string;
+  cardsOn: boolean;
+  store: { availableCents: number; live: boolean } | null;
+}) {
   const waiting = partners.flatMap((partner) =>
     partner.payouts.filter((payout) => payout.status === "REQUESTED").map((payout) => ({ partner, payout })),
   );
@@ -241,6 +342,31 @@ function Everyone({ partners, meId }: { partners: Partner[]; meId: string }) {
         <h2 className="display text-3xl text-white">Everyone&apos;s payouts</h2>
         <p className="text-sm text-smoke">Only the master account sees this part and can change it.</p>
       </div>
+
+      {cardsOn ? (
+        <div className={panel}>
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h3 className="text-xl font-semibold text-white">Stripe balance</h3>
+            {store && !store.live ? <span className="tag tag-warn">Test mode</span> : null}
+          </div>
+          {store ? (
+            <>
+              <p className="num text-3xl font-semibold text-white">{formatMoney(store.availableCents)}</p>
+              <p className="text-sm text-smoke">
+                Card payouts are paid from this. Customers pay through Square, so it only holds what you add: in
+                Stripe, open Balance and choose Add to balance. Everyone&apos;s balances together come to{" "}
+                {formatMoney(partners.reduce((total, partner) => total + partner.statement.availableCents, 0))}
+                {waiting.length > 0
+                  ? `, and ${formatMoney(waiting.reduce((total, row) => total + row.payout.amountCents, 0))} is waiting to be sent`
+                  : ""}
+                .
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-bone-dim">Stripe didn&apos;t answer just now. Reload the page in a moment.</p>
+          )}
+        </div>
+      ) : null}
 
       <div className={panel}>
         <h3 className="text-xl font-semibold text-white">Waiting to be sent</h3>
@@ -259,7 +385,14 @@ function Everyone({ partners, meId }: { partners: Partner[]; meId: string }) {
                   </p>
                 </div>
                 <p className="text-[0.8125rem] text-smoke">Cashed out {formatDateTime(payout.requestedAt)}</p>
-                <SettlePayoutForm id={payout.id} summary={`${formatMoney(payout.amountCents)} to ${partner.name}`} />
+                {payout.providerError ? (
+                  <p className="notice px-3 py-2 text-sm">Not sent to their card: {payout.providerError}</p>
+                ) : null}
+                <SettlePayoutForm
+                  id={payout.id}
+                  summary={`${formatMoney(payout.amountCents)} to ${partner.name}`}
+                  canSendToCard={cardsOn && partner.stripeAccountId !== null && partner.stripeLivemode === (store?.live ?? null)}
+                />
               </li>
             ))}
           </ul>

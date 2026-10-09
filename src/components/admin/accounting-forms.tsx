@@ -27,11 +27,14 @@ function CategorySelect({ fallback }: { fallback: keyof typeof EXPENSE_CATEGORIE
     <label className={field}>
       Kind
       <select name="category" defaultValue={fallback} className="input">
-        {Object.entries(EXPENSE_CATEGORIES).map(([key, label]) => (
-          <option key={key} value={key}>
-            {label}
-          </option>
-        ))}
+        {/* Card payout fees are worked out from the payouts themselves, so they are never typed in. */}
+        {Object.entries(EXPENSE_CATEGORIES)
+          .filter(([key]) => key !== "PAYOUTS")
+          .map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
       </select>
     </label>
   );
@@ -135,6 +138,20 @@ function AssumptionsFields({ value }: { value: Assumptions }) {
         <label className={field}>
           Printer&apos;s shipping per order (USD)
           <input name="shipCost" inputMode="decimal" defaultValue={(value.shipCostCents / 100).toFixed(2)} className="input" />
+        </label>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <label className={field}>
+          Card payout fee (%)
+          <input name="payoutPercent" inputMode="decimal" required defaultValue={(value.payoutFeeBps / 100).toString()} className="input" />
+        </label>
+        <label className={field}>
+          Card payout fee, fixed part (USD)
+          <input name="payoutFixed" inputMode="decimal" required defaultValue={(value.payoutFeeFixedCents / 100).toFixed(2)} className="input" />
+        </label>
+        <label className={field}>
+          Per partner paid by card, a month (USD)
+          <input name="payoutAccount" inputMode="decimal" required defaultValue={(value.payoutAccountCents / 100).toFixed(2)} className="input" />
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-4">

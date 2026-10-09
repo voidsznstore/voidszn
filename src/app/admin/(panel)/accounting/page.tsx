@@ -447,7 +447,8 @@ async function Accounting({ searchParams }: Pick<Props, "searchParams">) {
           <p className="text-sm text-smoke">
             Used only until the real figure is known. Square reports its real fee a few minutes after each payment
             and that replaces the card fee here. The printer&apos;s shipping is added to an order&apos;s cost until
-            someone types in the real bill on the order.
+            someone types in the real bill on the order. The payout fees are what Stripe charges the business each
+            time a partner is paid to their card; check them against Stripe&apos;s monthly bill.
           </p>
         </div>
         {master ? (
@@ -456,6 +457,11 @@ async function Accounting({ searchParams }: Pick<Props, "searchParams">) {
           <MoneyRows label="Stand-in figures">
             <TextRow label="Card fee" value={`${assumptions.feeBps / 100}% + ${formatMoney(assumptions.feeFixedCents)}`} />
             <MoneyRow label="Printer's shipping per order" cents={assumptions.shipCostCents} />
+            <TextRow
+              label="Card payout fee"
+              value={`${assumptions.payoutFeeBps / 100}% + ${formatMoney(assumptions.payoutFeeFixedCents)}`}
+            />
+            <MoneyRow label="Per partner paid by card, a month" cents={assumptions.payoutAccountCents} />
           </MoneyRows>
         )}
       </section>

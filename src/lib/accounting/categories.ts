@@ -4,6 +4,7 @@ export const EXPENSE_CATEGORIES = {
   SUBSCRIPTIONS: "Subscriptions and software",
   SUPPLIES: "Samples and supplies",
   FEES: "Licences and filing fees",
+  PAYOUTS: "Card payout fees",
   OTHER: "Other",
 } as const;
 

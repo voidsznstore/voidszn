@@ -145,6 +145,10 @@ export const adminUsers = pgTable("admin_users", {
   disabledAt: timestamp("disabled_at", { withTimezone: true }),
   /** Where this person's payouts are sent when they are sent by hand, e.g. "Zelle 407-555-0100". Never a card number. */
   payoutHandle: text("payout_handle"),
+  /** This person's Stripe account, which card payouts go through. Made the first time they add a card. */
+  stripeAccountId: text("stripe_account_id").unique(),
+  /** Whether that Stripe account is a real one or a test-mode one. An account only works with a key of the same kind. */
+  stripeLivemode: boolean("stripe_livemode"),
   /** The federal income tax rate this person plans with, in basis points. Only used to suggest what to set aside. */
   incomeTaxBps: integer("income_tax_bps").notNull().default(2200),
   createdAt: createdAt(),
@@ -769,7 +773,7 @@ export const partnerPayouts = pgTable(
       .references(() => adminUsers.id, { onDelete: "restrict" }),
     amountCents: integer("amount_cents").notNull(),
     status: text("status").notNull().default("REQUESTED"),
-    /** How it is paid: "manual" until a card payout service is connected. */
+    /** How it is paid: "card" through Stripe, or "manual" when the master account sends it by hand. */
     method: text("method").notNull().default("manual"),
     /** Where it was sent, as shown to people. Never a full card number. */
     destination: text("destination"),
@@ -780,9 +784,30 @@ export const partnerPayouts = pgTable(
     sentAt: timestamp("sent_at", { withTimezone: true }),
     closedBy: text("closed_by"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    /*
+     * Card payouts. Stripe moves the money in two steps: a transfer into the
+     * partner's Stripe account, then a payout from there to their card.
+     */
+    /** How many times sending to the card has been tried. Part of each request's key to Stripe. */
+    cardAttempts: integer("card_attempts").notNull().default(0),
+    /**
+     * Set while a send is in progress, so two can't run at once. Also held for a few
+     * minutes after a send that got no clear answer, so the next try doesn't start
+     * until Stripe has finished with the last one.
+     */
+    cardClaimedAt: timestamp("card_claimed_at", { withTimezone: true }),
+    /** Stripe's id for the transfer, while the money is in the partner's Stripe account. */
+    transferRef: text("transfer_ref"),
+    /** Stripe's id for the payout to the card. */
+    payoutRef: text("payout_ref"),
+    /** Where Stripe says the payout is: pending, in_transit, paid, failed or canceled. */
+    providerStatus: text("provider_status"),
+    /** Why the last try at sending to the card didn't work, in Stripe's words. */
+    providerError: text("provider_error"),
   },
   (t) => [
     index("partner_payouts_admin_idx").on(t.adminId, t.requestedAt),
+    index("partner_payouts_payout_ref_idx").on(t.payoutRef),
     check("partner_payouts_amount_pos", sql`${t.amountCents} > 0`),
     check("partner_payouts_status", sql`${t.status} IN ('REQUESTED', 'SENT', 'CANCELLED')`),
   ],

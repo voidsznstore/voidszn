@@ -4,12 +4,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   type PayoutFormState,
+  addCardAction,
   adjustAction,
   cancelPayoutAction,
   cashOutAction,
+  manageCardAction,
   markSentAction,
   saveHandleAction,
   saveTaxRateAction,
+  sendToCardAction,
   setShareAction,
 } from "@/app/admin/(panel)/payouts/actions";
 import { useFormAction } from "./use-form-action";
@@ -26,7 +29,19 @@ function Result({ state }: { state: PayoutFormState }) {
 }
 
 /** Cashing out asks once before it goes ahead. */
-export function CashOutButton({ amount, disabled }: { amount: string; disabled: boolean }) {
+export function CashOutButton({
+  amount,
+  disabled,
+  card,
+  fee,
+}: {
+  amount: string;
+  disabled: boolean;
+  /** The card it will go to, when one is connected and ready. */
+  card?: string;
+  /** Roughly what Stripe charges the business for sending it to the card. */
+  fee?: string;
+}) {
   const { state, action, pending, onSubmit } = useFormAction(cashOutAction, initial);
   const [asking, setAsking] = useState(false);
 
@@ -42,13 +57,20 @@ export function CashOutButton({ amount, disabled }: { amount: string; disabled: 
       {/* The keys keep these as two separate buttons. Without them the first button
           would turn into the second mid-click and send the form without asking. */}
       {asking ? (
-        <div key="confirm" className="flex flex-wrap items-center gap-3">
-          <button type="submit" disabled={pending} className="btn btn-accent">
-            Yes, cash out {amount}
-          </button>
-          <button type="button" onClick={() => setAsking(false)} className="inline-flex min-h-11 items-center text-sm link">
-            Not now
-          </button>
+        <div key="confirm" className="flex flex-col gap-3">
+          <p className="text-sm text-bone-dim">
+            {card
+              ? `${amount} goes to ${card}, usually within 30 minutes.${fee ? ` Stripe charges the business about ${fee} for it, which comes off the shared profit.` : ""}`
+              : `${amount} comes off your balance and the master account sends it to you.`}
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="submit" disabled={pending} className="btn btn-accent">
+              Yes, cash out {amount}
+            </button>
+            <button type="button" onClick={() => setAsking(false)} className="inline-flex min-h-11 items-center text-sm link">
+              Not now
+            </button>
+          </div>
         </div>
       ) : (
         <div key="ask">
@@ -62,17 +84,43 @@ export function CashOutButton({ amount, disabled }: { amount: string; disabled: 
   );
 }
 
-export function HandleForm({ handle }: { handle: string }) {
-  const { bfcacheId } = useRouter();
-  return <Handle key={bfcacheId} handle={handle} />;
+/** Goes to Stripe's own form to add a debit card, or to finish adding one. */
+export function AddCardButton({ label }: { label: string }) {
+  const { state, action, pending, onSubmit } = useFormAction(addCardAction, initial);
+  return (
+    <form action={action} onSubmit={onSubmit} className="flex flex-wrap items-center gap-3">
+      <button type="submit" disabled={pending} className="btn btn-accent">
+        {pending ? "Opening Stripe…" : label}
+      </button>
+      <Result state={state} />
+    </form>
+  );
 }
 
-function Handle({ handle }: { handle: string }) {
+/** Goes to the person's own Stripe page, where the card can be changed. */
+export function ManageCardButton() {
+  const { state, action, pending, onSubmit } = useFormAction(manageCardAction, initial);
+  return (
+    <form action={action} onSubmit={onSubmit} className="flex flex-wrap items-center gap-3">
+      <button type="submit" disabled={pending} className="btn btn-glass btn-sm">
+        {pending ? "Opening Stripe…" : "Change card"}
+      </button>
+      <Result state={state} />
+    </form>
+  );
+}
+
+export function HandleForm({ handle, label }: { handle: string; label: string }) {
+  const { bfcacheId } = useRouter();
+  return <Handle key={bfcacheId} handle={handle} label={label} />;
+}
+
+function Handle({ handle, label }: { handle: string; label: string }) {
   const { state, action, pending, onSubmit } = useFormAction(saveHandleAction, initial);
   return (
     <form action={action} onSubmit={onSubmit} className="flex flex-col gap-3">
       <label className={field}>
-        Where to send it for now
+        {label}
         <input
           name="handle"
           defaultValue={handle}
@@ -123,16 +171,27 @@ export function TaxRateForm({ rate, rates }: { rate: number; rates: { bps: numbe
 /* ------------------------------------------------------------------ */
 
 /** A cash-out waiting to be sent: mark it sent, or call it off. */
-export function SettlePayoutForm({ id, summary }: { id: string; summary: string }) {
+export function SettlePayoutForm({
+  id,
+  summary,
+  canSendToCard,
+}: {
+  id: string;
+  summary: string;
+  /** Card payouts are on and this person has started adding a card. */
+  canSendToCard: boolean;
+}) {
   const sent = useFormAction(markSentAction, initial);
   const cancelled = useFormAction(cancelPayoutAction, initial);
+  const carded = useFormAction(sendToCardAction, initial);
   const [note, setNote] = useState("");
-  const pending = sent.pending || cancelled.pending;
+  const pending = sent.pending || cancelled.pending || carded.pending;
+  const latest = [carded.state, sent.state, cancelled.state].find((state) => state.error || state.done) ?? initial;
 
   return (
     <div className="flex flex-col gap-3">
       <label className={field}>
-        Note (optional)
+        Note, if sending it by hand (optional)
         <input
           value={note}
           onChange={(event) => setNote(event.target.value)}
@@ -143,6 +202,14 @@ export function SettlePayoutForm({ id, summary }: { id: string; summary: string 
         />
       </label>
       <div className="flex flex-wrap items-center gap-3">
+        {canSendToCard ? (
+          <form action={carded.action} onSubmit={carded.onSubmit}>
+            <input type="hidden" name="id" value={id} />
+            <button type="submit" disabled={pending} className="btn btn-accent btn-sm">
+              {carded.pending ? "Sending…" : "Send to card"}
+            </button>
+          </form>
+        ) : null}
         <form
           action={sent.action}
           onSubmit={(event) => {
@@ -156,7 +223,7 @@ export function SettlePayoutForm({ id, summary }: { id: string; summary: string 
         >
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="note" value={note} />
-          <button type="submit" disabled={pending} className="btn btn-accent btn-sm">
+          <button type="submit" disabled={pending} className={`btn btn-sm ${canSendToCard ? "btn-glass" : "btn-accent"}`}>
             {sent.pending ? "Saving…" : "Mark as sent"}
           </button>
         </form>
@@ -176,7 +243,7 @@ export function SettlePayoutForm({ id, summary }: { id: string; summary: string 
             {cancelled.pending ? "Cancelling…" : "Cancel it"}
           </button>
         </form>
-        <Result state={sent.state.error || sent.state.done ? sent.state : cancelled.state} />
+        <Result state={latest} />
       </div>
     </div>
   );

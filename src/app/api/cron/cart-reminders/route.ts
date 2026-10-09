@@ -3,11 +3,13 @@ import { connection } from "next/server";
 import { sendPendingInvites } from "@/lib/admin/invites";
 import { runCartReminders } from "@/lib/email/cart-reminders";
 import { syncProcessingFees } from "@/lib/payments/fees";
+import { followUpCardPayouts } from "@/lib/payouts/card";
 
 /**
  * Called on a timer (see vercel.json) to do the store's small background jobs:
  * send cart reminders that are due, send admin invitations that are waiting,
- * and pick up the real card fee on recent orders.
+ * pick up the real card fee on recent orders, and follow up payouts to
+ * partners' cards.
  *
  * It takes no input and each job only finishes work that was already waiting,
  * once, so calling it by hand does nothing a few minutes' wait wouldn't. If
@@ -39,6 +41,7 @@ export async function GET(request: Request) {
   };
   const invites = await job("invites", sendPendingInvites);
   const fees = await job("fees", syncProcessingFees);
+  const cardPayouts = await job("card-payouts", followUpCardPayouts);
   const reminders = await job("cart-reminders", runCartReminders);
 
   // Counts only. Never who was emailed.
@@ -46,7 +49,8 @@ export async function GET(request: Request) {
     ...(reminders === "failed" ? { sent: 0, failed: 0 } : reminders),
     invites,
     fees,
+    cardPayouts,
   };
-  const failed = reminders === "failed" || invites === "failed" || fees === "failed";
+  const failed = [reminders, invites, fees, cardPayouts].includes("failed");
   return Response.json(failed ? { ...body, error: "Failed" } : body, { status: failed ? 500 : 200 });
 }

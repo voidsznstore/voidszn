@@ -734,6 +734,8 @@ export function payoutRequestedEmail(input: {
   amount: string;
   sendTo: string | null;
   url: string;
+  /** Why it couldn't go straight to their card, when card payouts are on. */
+  problem?: string;
 }): RenderedEmail {
   return {
     subject: `${input.partner} cashed out ${input.amount}`,
@@ -741,6 +743,7 @@ export function payoutRequestedEmail(input: {
       "Payout to send",
       [
         { p: `${input.partner} has cashed out ${input.amount}. It has come off their balance and is waiting to be sent.` },
+        ...(input.problem ? [{ note: `It couldn't go to their card: ${input.problem}` } as const] : []),
         {
           facts: [
             ["Amount", input.amount],
@@ -748,7 +751,11 @@ export function payoutRequestedEmail(input: {
           ],
         },
         { button: { label: "Open payouts", url: input.url } },
-        { note: "Once the money has gone, mark the payout as sent so they can see it." },
+        {
+          note: input.problem
+            ? "Fix what stopped it and press Send to card, or send it another way and mark it as sent."
+            : "Once the money has gone, mark the payout as sent so they can see it.",
+        },
       ],
       { preheader: `${input.amount} to send.` },
     ),
@@ -767,6 +774,23 @@ export function payoutSentEmail(input: { name: string; amount: string; note: str
         { button: { label: "See your payouts", url: input.url } },
       ],
       { preheader: `${input.amount} is on its way.` },
+    ),
+  };
+}
+
+/** To the partner and the master account: a card payout bounced and the money is back on the balance. */
+export function payoutFailedEmail(input: { partner: string; amount: string; reason: string; url: string }): RenderedEmail {
+  return {
+    subject: `${input.amount} card payout didn't go through`,
+    ...layout(
+      "Payout not sent",
+      [
+        { p: `The ${input.amount} card payout to ${input.partner} didn't go through. Nothing was lost: the money is back on the balance and can be cashed out again.` },
+        { facts: [["Why", input.reason]] },
+        { button: { label: "Open payouts", url: input.url } },
+        { note: "If it keeps failing, check the card in Stripe: it has to be a debit card that isn't prepaid." },
+      ],
+      { preheader: "The money is back on the balance." },
     ),
   };
 }

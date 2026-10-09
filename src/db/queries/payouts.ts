@@ -31,6 +31,10 @@ export type Partner = {
   joined: boolean;
   disabled: boolean;
   payoutHandle: string | null;
+  /** Their Stripe account, once they have started adding a card. */
+  stripeAccountId: string | null;
+  /** Whether that account is a live one or a test one. */
+  stripeLivemode: boolean | null;
   incomeTaxBps: number;
   shares: ShareRow[];
   /** Newest first. */
@@ -77,6 +81,8 @@ export async function loadPayoutState(db: Database, now: Date = new Date()): Pro
       joined: !admin.passwordHash.startsWith("!"),
       disabled: admin.disabledAt !== null,
       payoutHandle: admin.payoutHandle,
+      stripeAccountId: admin.stripeAccountId,
+      stripeLivemode: admin.stripeLivemode,
       incomeTaxBps: admin.incomeTaxBps,
       shares: own.shares,
       payouts: own.payouts,
@@ -140,16 +146,39 @@ export async function requestPayout(db: Database, adminId: string): Promise<Payo
   });
 }
 
-/** Marks a cash-out as sent. Only one waiting to be sent can be. */
+/** A send that got no clear answer keeps its claim this long, so Stripe has finished before the next try. */
+export const CLAIM_MINUTES = 5;
+
+/** Not being sent to a card right now, and with no money sitting in the partner's Stripe account for it. */
+const freeOfCard = sql`${partnerPayouts.transferRef} is null and (${partnerPayouts.cardClaimedAt} is null or ${partnerPayouts.cardClaimedAt} < now() - make_interval(mins => ${CLAIM_MINUTES}))`;
+
+/** Why a waiting cash-out couldn't be settled by hand, in words for the master account. */
+async function whyNot(tx: Database, id: string): Promise<string> {
+  const [row] = await tx
+    .select({ status: partnerPayouts.status, transferRef: partnerPayouts.transferRef })
+    .from(partnerPayouts)
+    .where(eq(partnerPayouts.id, id))
+    .limit(1);
+  if (!row || row.status !== "REQUESTED") return "That payout has already been dealt with. Refresh the page.";
+  if (row.transferRef) {
+    return "Money for this payout is in their Stripe account, on its way to their card. Press Send to card to finish it.";
+  }
+  return "This payout is being sent to their card right now. Give it a few minutes and refresh.";
+}
+
+/**
+ * Marks a cash-out as sent by hand. Only one that is waiting, and that no card
+ * payout has hold of, can be: otherwise the same money could go out twice.
+ */
 export async function markPayoutSent(db: Database, id: string, actor: string, note: string): Promise<Payout> {
   return db.transaction(async (tx) => {
     await lock(tx);
     const [payout] = await tx
       .update(partnerPayouts)
-      .set({ status: "SENT", sentAt: new Date(), closedBy: actor, note: note || null })
-      .where(and(eq(partnerPayouts.id, id), eq(partnerPayouts.status, "REQUESTED")))
+      .set({ status: "SENT", method: "manual", sentAt: new Date(), closedBy: actor, note: note || null, providerError: null })
+      .where(and(eq(partnerPayouts.id, id), eq(partnerPayouts.status, "REQUESTED"), freeOfCard))
       .returning();
-    if (!payout) throw new PayoutError("That payout has already been dealt with. Refresh the page.");
+    if (!payout) throw new PayoutError(await whyNot(tx, id));
     return payout;
   });
 }
@@ -161,9 +190,9 @@ export async function cancelPayout(db: Database, id: string, actor: string, note
     const [payout] = await tx
       .update(partnerPayouts)
       .set({ status: "CANCELLED", cancelledAt: new Date(), closedBy: actor, note: note || null })
-      .where(and(eq(partnerPayouts.id, id), eq(partnerPayouts.status, "REQUESTED")))
+      .where(and(eq(partnerPayouts.id, id), eq(partnerPayouts.status, "REQUESTED"), freeOfCard))
       .returning();
-    if (!payout) throw new PayoutError("That payout has already been dealt with. Refresh the page.");
+    if (!payout) throw new PayoutError(await whyNot(tx, id));
     return payout;
   });
 }
@@ -222,3 +251,198 @@ export const setPayoutHandle = (db: Database, adminId: string, handle: string | 
 
 export const setIncomeTaxRate = (db: Database, adminId: string, bps: number) =>
   db.update(adminUsers).set({ incomeTaxBps: bps }).where(eq(adminUsers.id, adminId));
+
+/* ------------------------------------------------------------------ */
+/* Card payouts                                                        */
+/* ------------------------------------------------------------------ */
+
+export const setStripeAccount = (db: Database, adminId: string, accountId: string, live: boolean) =>
+  db.update(adminUsers).set({ stripeAccountId: accountId, stripeLivemode: live }).where(eq(adminUsers.id, adminId));
+
+/** A waiting cash-out, taken for sending to a card, with who it is for. */
+export type ClaimedPayout = Payout & {
+  /** Marks this hold on the cash-out. Every later write names it, so a hold that has lapsed can't write. */
+  claim: Date;
+  stripeAccountId: string | null;
+  stripeLivemode: boolean | null;
+  disabled: boolean;
+  name: string;
+  email: string;
+};
+
+/**
+ * Takes a waiting cash-out for sending to a card, so two sends of the same one
+ * can't run side by side. Returns null if it isn't waiting any more or another
+ * send has it.
+ */
+export async function claimForCard(db: Database, id: string): Promise<ClaimedPayout | null> {
+  const claim = new Date();
+  const [claimed] = await db
+    .update(partnerPayouts)
+    // Each try gets its own number, which goes into the keys of its requests to Stripe.
+    .set({ cardClaimedAt: claim, cardAttempts: sql`${partnerPayouts.cardAttempts} + 1` })
+    .where(
+      and(
+        eq(partnerPayouts.id, id),
+        eq(partnerPayouts.status, "REQUESTED"),
+        sql`(${partnerPayouts.cardClaimedAt} is null or ${partnerPayouts.cardClaimedAt} < now() - make_interval(mins => ${CLAIM_MINUTES}))`,
+      ),
+    )
+    .returning();
+  if (!claimed) return null;
+  const [admin] = await db
+    .select({
+      stripeAccountId: adminUsers.stripeAccountId,
+      stripeLivemode: adminUsers.stripeLivemode,
+      disabledAt: adminUsers.disabledAt,
+      name: adminUsers.name,
+      email: adminUsers.email,
+    })
+    .from(adminUsers)
+    .where(eq(adminUsers.id, claimed.adminId))
+    .limit(1);
+  return {
+    ...claimed,
+    claim,
+    stripeAccountId: admin?.stripeAccountId ?? null,
+    stripeLivemode: admin?.stripeLivemode ?? null,
+    disabled: Boolean(admin?.disabledAt),
+    name: admin?.name ?? "",
+    email: admin?.email ?? "",
+  };
+}
+
+/**
+ * Writes down how far a send has got. `release` lets go of the hold, for when
+ * the outcome is certain; without it the hold stays until it lapses. Returns
+ * false, and writes nothing, if this hold has lapsed and another send has taken over.
+ */
+export async function noteCardProgress(
+  db: Database,
+  held: { id: string; claim: Date },
+  change: Partial<Pick<Payout, "transferRef" | "payoutRef" | "providerStatus" | "providerError">>,
+  options: { release: boolean },
+): Promise<boolean> {
+  const written = await db
+    .update(partnerPayouts)
+    .set({ ...change, ...(options.release ? { cardClaimedAt: null } : {}) })
+    .where(
+      and(
+        eq(partnerPayouts.id, held.id),
+        eq(partnerPayouts.status, "REQUESTED"),
+        eq(partnerPayouts.cardClaimedAt, held.claim),
+      ),
+    )
+    .returning({ id: partnerPayouts.id });
+  return written.length > 0;
+}
+
+/** The money has gone to the card (or is on its way). The cash-out is settled. */
+export async function markCardSent(
+  db: Database,
+  held: { id: string; claim: Date },
+  sent: { payoutRef: string; providerStatus: string; destination: string; note?: string },
+): Promise<Payout | null> {
+  return db.transaction(async (tx) => {
+    await lock(tx);
+    const [payout] = await tx
+      .update(partnerPayouts)
+      .set({
+        status: "SENT",
+        method: "card",
+        sentAt: new Date(),
+        closedBy: "Stripe",
+        destination: sent.destination,
+        payoutRef: sent.payoutRef,
+        providerStatus: sent.providerStatus,
+        providerError: null,
+        note: sent.note ?? null,
+        cardClaimedAt: null,
+      })
+      .where(
+        and(
+          eq(partnerPayouts.id, held.id),
+          eq(partnerPayouts.status, "REQUESTED"),
+          eq(partnerPayouts.cardClaimedAt, held.claim),
+        ),
+      )
+      .returning();
+    return payout ?? null;
+  });
+}
+
+const followUpColumns = {
+  id: partnerPayouts.id,
+  adminId: partnerPayouts.adminId,
+  amountCents: partnerPayouts.amountCents,
+  payoutRef: partnerPayouts.payoutRef,
+  transferRef: partnerPayouts.transferRef,
+  providerStatus: partnerPayouts.providerStatus,
+  status: partnerPayouts.status,
+  stripeAccountId: adminUsers.stripeAccountId,
+  name: adminUsers.name,
+  email: adminUsers.email,
+};
+
+/**
+ * Card payouts from the last week, newest first. Ones Stripe has called paid are
+ * kept in, because a payout can show as paid and then come back as failed.
+ */
+export const cardPayoutsToFollow = (db: Database, limit: number) =>
+  db
+    .select(followUpColumns)
+    .from(partnerPayouts)
+    .innerJoin(adminUsers, eq(adminUsers.id, partnerPayouts.adminId))
+    .where(
+      and(
+        eq(partnerPayouts.status, "SENT"),
+        eq(partnerPayouts.method, "card"),
+        sql`${partnerPayouts.payoutRef} is not null`,
+        sql`coalesce(${partnerPayouts.providerStatus}, '') not in ('failed', 'canceled')`,
+        sql`${partnerPayouts.sentAt} > now() - interval '7 days'`,
+      ),
+    )
+    .orderBy(desc(partnerPayouts.sentAt))
+    .limit(limit);
+
+export const findCardPayoutByRef = async (db: Database, payoutRef: string) => {
+  const [row] = await db
+    .select(followUpColumns)
+    .from(partnerPayouts)
+    .innerJoin(adminUsers, eq(adminUsers.id, partnerPayouts.adminId))
+    .where(eq(partnerPayouts.payoutRef, payoutRef))
+    .limit(1);
+  return row ?? null;
+};
+
+/** Notes what Stripe says about a payout that was sent, and anything that needs a person to look. */
+export const noteSentPayout = (db: Database, id: string, change: { providerStatus: string; providerError?: string }) =>
+  db
+    .update(partnerPayouts)
+    .set(change)
+    .where(and(eq(partnerPayouts.id, id), eq(partnerPayouts.status, "SENT")));
+
+/**
+ * A payout that was marked sent bounced at the card. With the money taken back
+ * from the partner's Stripe account, the cash-out is called off and the amount
+ * is on their balance again. Only a payout still marked sent can be undone.
+ */
+export async function undoFailedCardPayout(db: Database, id: string, reason: string): Promise<Payout | null> {
+  return db.transaction(async (tx) => {
+    await lock(tx);
+    const [payout] = await tx
+      .update(partnerPayouts)
+      .set({
+        status: "CANCELLED",
+        cancelledAt: new Date(),
+        closedBy: "Stripe",
+        providerStatus: "failed",
+        providerError: reason,
+        transferRef: null,
+        note: `The card payout failed: ${reason} The money is back on the balance.`,
+      })
+      .where(and(eq(partnerPayouts.id, id), eq(partnerPayouts.status, "SENT"), eq(partnerPayouts.method, "card")))
+      .returning();
+    return payout ?? null;
+  });
+}
