@@ -19,6 +19,8 @@ export const siteConfig = {
   supportEmail: "support@voidszn.com",
   /** The address order emails are sent from. Replies go to the support address. */
   ordersEmail: "orders@voidszn.com",
+  /** The address marketing emails are sent from. Replies go to the support address. */
+  newsEmail: "hello@voidszn.com",
   /** Where infringement notices go. Can be the same inbox as support. */
   legalEmail: "legal@voidszn.com",
   /** State whose law governs the terms. */

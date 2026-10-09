@@ -70,6 +70,17 @@ sales), just in ordered by `products.created_at`.
   and an "Add an order for them" button. Customers with orders can't be deleted.
   `accepts_email` means they agreed to marketing emails; order emails ignore it.
   Anyone in `email_optouts` unsubscribed themselves and is never sent marketing.
+- **Campaigns** (`/admin/campaigns`, `src/lib/email/campaigns.ts`): marketing emails
+  written in the admin (subject, preview line, message, optional photo and button).
+  They go to customers marked "Agreed to get marketing emails" plus `subscribers`,
+  minus anyone in `email_optouts`. Sent through Resend from `siteConfig.newsEmail`.
+  Starting a campaign writes one `campaign_sends` row per person, each with its own
+  unsubscribe token, so nobody can be sent the same campaign twice and a send that
+  stops (the email plan's limit, a timeout) carries on from where it was.
+  Every email has an unsubscribe link (`/unsubscribe/[token]`) and the one-click
+  header mail apps use (`POST /api/unsubscribe/[token]`). Unsubscribing takes effect
+  at once. **Campaigns can't be sent until `siteConfig.mailingAddress` is filled in**:
+  the postal address is required at the foot of every marketing email.
 - **Refunds:** the Refund box on an order sends the money back through Square, in full
   or in part, and counts it in `orders.refunded_cents`. A full refund closes the order.
   Each refund carries a key built from the order, what was already refunded, the

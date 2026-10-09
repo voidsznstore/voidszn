@@ -40,6 +40,9 @@ advice. Have a lawyer read the policy pages before the store takes real orders.
 
 - [ ] Email (CAN-SPAM): real "from" name, honest subject lines, the mailing address in
       every marketing email, a working unsubscribe honored within 10 business days.
+      Campaigns in the admin add the address and unsubscribe link by themselves and
+      won't send until `mailingAddress` in `site-config.ts` is filled in. Only tick
+      "Agreed to get marketing emails" for people who actually said yes.
 - [ ] Texts (TCPA): only to people who gave written consent through an unchecked box or
       explicit sign-up, with message frequency, "Msg and data rates may apply", and
       STOP/HELP wording at the point of sign-up.

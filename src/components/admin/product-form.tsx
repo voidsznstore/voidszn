@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useId, useRef, useState, useTransition } from "react";
 import { saveProductAction } from "@/app/admin/(panel)/products/actions";
 import type { ProductDraft } from "@/db/queries/admin-catalog";
+import { uploadPhoto } from "./photo-upload";
 
 type CategoryOption = { id: string; kind: "PRODUCT_TYPE" | "INTEREST"; name: string };
 
@@ -23,10 +24,6 @@ const COLOR_PRESETS = [
 ];
 const SIZE_PRESET = ["S", "M", "L", "XL", "2XL"];
 
-/** The longest side a photo is shrunk to before upload. Plenty for a product page. */
-const MAX_SIDE = 2000;
-const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
-
 let counter = 0;
 const newKey = () => `k${++counter}`;
 
@@ -37,36 +34,6 @@ function toCents(text: string): number | null {
   const cleaned = text.trim().replace(/^\$/, "");
   if (!/^\d{1,6}(\.\d{1,2})?$/.test(cleaned)) return null;
   return Math.round(Number(cleaned) * 100);
-}
-
-/** Shrinks and re-encodes a photo in the browser so uploads are quick and pages load fast. */
-async function preparePhoto(file: File): Promise<{ blob: Blob; width: number; height: number }> {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("This browser can't prepare photos.");
-  context.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
-
-  const encode = (type: string, quality: number) =>
-    new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
-
-  for (const [type, quality] of [
-    ["image/webp", 0.86],
-    ["image/jpeg", 0.86],
-    ["image/jpeg", 0.7],
-  ] as const) {
-    const blob = await encode(type, quality);
-    // Some browsers quietly hand back a PNG when they can't make the type asked for.
-    if (blob && blob.type === type && blob.size <= MAX_UPLOAD_BYTES) return { blob, width, height };
-  }
-  throw new Error("That photo is too large to prepare.");
 }
 
 type TextFieldProps = {
@@ -217,19 +184,10 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
 
     for (const [index, file] of list.entries()) {
       try {
-        const photo = await preparePhoto(file);
-        const body = new FormData();
-        body.set("file", photo.blob, "photo");
-        const response = await fetch("/api/admin/uploads", { method: "POST", body });
-        const data = (await response.json().catch(() => null)) as {
-          url?: string;
-          error?: string;
-        } | null;
-        if (!response.ok || !data?.url) throw new Error(data?.error ?? "The photo could not be stored.");
-        const url = data.url;
+        const photo = await uploadPhoto(file);
         setImages((current) => [
           ...current,
-          { key: newKey(), url, alt: "", width: photo.width, height: photo.height, color: null },
+          { key: newKey(), url: photo.url, alt: "", width: photo.width, height: photo.height, color: null },
         ]);
         touch();
       } catch (problem) {

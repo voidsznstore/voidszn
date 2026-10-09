@@ -22,7 +22,11 @@ type Block =
   | { p: string }
   | { button: { label: string; url: string } }
   | { rows: [string, string][]; totalRow?: [string, string] }
-  | { lines: string[] };
+  | { lines: string[] }
+  | { image: { url: string; alt: string } };
+
+/** A line at the foot of an email. A link is written out in full in the text version. */
+type FootLine = string | { before: string; link: { label: string; url: string }; after?: string };
 
 /** Business details for the foot of every email. Anything not filled in yet is left out. */
 function footer(): string[] {
@@ -38,7 +42,16 @@ function footer(): string[] {
   ];
 }
 
-function layout(heading: string, blocks: Block[]): { html: string; text: string } {
+function layout(
+  heading: string,
+  blocks: Block[],
+  options: {
+    /** Replaces the usual foot of the email. */
+    foot?: FootLine[];
+    /** The line mail apps show next to the subject. Not shown in the email itself. */
+    preheader?: string;
+  } = {},
+): { html: string; text: string } {
   const cell = "padding:6px 0;font-size:15px;line-height:22px;color:#333333;";
   const html = blocks
     .map((block) => {
@@ -50,6 +63,9 @@ function layout(heading: string, blocks: Block[]): { html: string; text: string 
       }
       if ("lines" in block) {
         return `<p style="margin:0 0 16px;font-size:15px;line-height:22px;color:#333333;">${block.lines.map(escape).join("<br>")}</p>`;
+      }
+      if ("image" in block) {
+        return `<p style="margin:0 0 20px;"><img src="${escape(block.image.url)}" alt="${escape(block.image.alt)}" width="504" style="display:block;width:100%;max-width:504px;height:auto;border:0;"></p>`;
       }
       const rows = block.rows
         .map(
@@ -69,18 +85,36 @@ function layout(heading: string, blocks: Block[]): { html: string; text: string 
       if ("p" in block) return block.p;
       if ("button" in block) return `${block.button.label}: ${block.button.url}`;
       if ("lines" in block) return block.lines.join("\n");
+      if ("image" in block) return null;
       return [...block.rows, ...(block.totalRow ? [block.totalRow] : [])]
         .map(([label, value]) => `${label}: ${value}`)
         .join("\n");
     })
+    .filter((part) => part !== null)
     .join("\n\n");
 
-  const foot = footer();
+  const foot = options.foot ?? footer();
+  const footHtml = foot
+    .map((line) =>
+      typeof line === "string"
+        ? escape(line)
+        : `${escape(line.before)}<a href="${escape(line.link.url)}" style="color:#777777;text-decoration:underline;">${escape(line.link.label)}</a>${escape(line.after ?? "")}`,
+    )
+    .join("<br>");
+  const footText = foot
+    .map((line) =>
+      typeof line === "string" ? line : `${line.before}${line.link.label}: ${line.link.url}${line.after ?? ""}`,
+    )
+    .join("\n");
+  // Hidden text at the very top is what mail apps show as the preview line.
+  const preheader = options.preheader
+    ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escape(options.preheader)}</div>\n`
+    : "";
   return {
     html: `<!doctype html>
 <html lang="en">
 <body style="margin:0;padding:0;background:#f4f4f2;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f2;">
+${preheader}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f2;">
 <tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;">
 <tr><td style="padding:24px 28px;background:#0a0a0a;color:#ffffff;font-size:22px;font-weight:bold;letter-spacing:2px;">${escape(siteConfig.name)}</td></tr>
@@ -88,13 +122,13 @@ function layout(heading: string, blocks: Block[]): { html: string; text: string 
 <h1 style="margin:0 0 20px;font-size:24px;line-height:30px;color:#111111;">${escape(heading)}</h1>
 ${html}
 </td></tr>
-<tr><td style="padding:20px 28px;border-top:1px solid #eeeeee;font-size:13px;line-height:20px;color:#777777;">${foot.map(escape).join("<br>")}</td></tr>
+<tr><td style="padding:20px 28px;border-top:1px solid #eeeeee;font-size:13px;line-height:20px;color:#777777;">${footHtml}</td></tr>
 </table>
 </td></tr>
 </table>
 </body>
 </html>`,
-    text: `${heading}\n\n${text}\n\n--\n${foot.join("\n")}`,
+    text: `${heading}\n\n${text}\n\n--\n${footText}`,
   };
 }
 
@@ -224,5 +258,55 @@ export function passwordResetEmail(input: { name: string; url: string; minutes: 
       { p: `The link works once and expires in ${input.minutes} minutes. You'll still need your authenticator app to sign in.` },
       { p: "If this wasn't you, ignore this email. Your password stays as it is." },
     ]),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Marketing                                                           */
+/* ------------------------------------------------------------------ */
+
+export type CampaignContent = {
+  subject: string;
+  preheader: string;
+  /** Plain text. A blank line starts a new paragraph. */
+  body: string;
+  imageUrl: string | null;
+  buttonLabel: string;
+  buttonUrl: string;
+};
+
+/**
+ * A marketing email. The foot carries what the law asks for in every one: who
+ * sent it, a postal address and a way to stop getting them.
+ */
+export function campaignEmail(content: CampaignContent, unsubscribeUrl: string): RenderedEmail {
+  const blocks: Block[] = [];
+  if (content.imageUrl) blocks.push({ image: { url: content.imageUrl, alt: "" } });
+  for (const paragraph of content.body.split(/\n\s*\n/)) {
+    const lines = paragraph.split("\n").map((line) => line.trim()).filter(Boolean);
+    if (lines.length === 1) blocks.push({ p: lines[0] });
+    else if (lines.length > 1) blocks.push({ lines });
+  }
+  if (content.buttonLabel.trim() && content.buttonUrl.trim()) {
+    blocks.push({ button: { label: content.buttonLabel.trim(), url: content.buttonUrl.trim() } });
+  }
+
+  const unfilled = unfilledSiteConfig();
+  const sender = [
+    unfilled.includes("legalName") ? siteConfig.name : siteConfig.legalName,
+    unfilled.includes("mailingAddress") ? null : siteConfig.mailingAddress,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return {
+    subject: content.subject,
+    ...layout(content.subject, blocks, {
+      preheader: content.preheader.trim() || undefined,
+      foot: [
+        `You're getting this because you agreed to emails from ${siteConfig.name}.`,
+        { before: "Don't want them? ", link: { label: "Unsubscribe", url: unsubscribeUrl }, after: "." },
+        sender,
+      ],
+    }),
   };
 }

@@ -23,7 +23,24 @@ export type Email = {
    * that already went out, it is not sent twice.
    */
   idempotencyKey: string;
+  /** Marketing email goes out from the news address. Everything else is an order email. */
+  kind?: "order" | "marketing";
+  /** Extra mail headers, e.g. the unsubscribe ones on marketing email. */
+  headers?: Record<string, string>;
 };
+
+const fromFor = (kind: Email["kind"]) =>
+  `${siteConfig.name} <${kind === "marketing" ? siteConfig.newsEmail : siteConfig.ordersEmail}>`;
+
+const payload = (email: Email) => ({
+  from: fromFor(email.kind),
+  to: [email.to],
+  reply_to: siteConfig.supportEmail,
+  subject: email.subject,
+  html: email.html,
+  text: email.text,
+  ...(email.headers ? { headers: email.headers } : {}),
+});
 
 export type SendResult = { ok: true } | { ok: false; reason: string };
 
@@ -39,14 +56,7 @@ export async function sendEmail(email: Email): Promise<SendResult> {
         "Content-Type": "application/json",
         "Idempotency-Key": email.idempotencyKey.slice(0, 256),
       },
-      body: JSON.stringify({
-        from: `${siteConfig.name} <${siteConfig.ordersEmail}>`,
-        to: [email.to],
-        reply_to: siteConfig.supportEmail,
-        subject: email.subject,
-        html: email.html,
-        text: email.text,
-      }),
+      body: JSON.stringify(payload(email)),
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
@@ -58,6 +68,51 @@ export async function sendEmail(email: Email): Promise<SendResult> {
   } catch (error) {
     console.error("[email] Send failed", error);
     return { ok: false, reason: "The email service could not be reached." };
+  }
+}
+
+export type BatchResult =
+  | { ok: true }
+  /** `retryLater` means nothing was wrong with the emails: the service is busy or at its limit. */
+  | { ok: false; reason: string; retryLater: boolean };
+
+/**
+ * Sends up to 100 emails in one request. All of them go or none do.
+ * `idempotencyKey` names this exact batch, so a repeat of it is not sent twice.
+ */
+export async function sendBatch(emails: Email[], idempotencyKey: string): Promise<BatchResult> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return { ok: false, reason: "Email isn't set up yet.", retryLater: true };
+
+  try {
+    const response = await fetch(`${API()}/emails/batch`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey.slice(0, 256),
+      },
+      body: JSON.stringify(emails.map(payload)),
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (response.ok) return { ok: true };
+
+    const data = (await response.json().catch(() => null)) as { name?: string } | null;
+    console.error(`[email] Batch failed (${response.status}${data?.name ? `: ${data.name}` : ""})`);
+    const limit = response.status === 429;
+    return {
+      ok: false,
+      retryLater: limit || response.status >= 500,
+      reason: limit
+        ? data?.name === "daily_quota_exceeded" || data?.name === "monthly_quota_exceeded"
+          ? "The email service's sending limit for your plan has been reached."
+          : "The email service asked to slow down."
+        : `The email service refused it (${response.status}).`,
+    };
+  } catch (error) {
+    console.error("[email] Batch failed", error);
+    return { ok: false, reason: "The email service could not be reached.", retryLater: true };
   }
 }
 
