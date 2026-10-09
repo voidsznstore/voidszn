@@ -509,7 +509,7 @@ async function main() {
   row = await state(late.id);
   assert.equal(row.status, "IN_PRODUCTION");
   assert.match(row.fulfillmentError ?? "", /is not this order/);
-  assert.equal(await withdrawFromRelay(late.orderNumber, "cancelled"), " It was cancelled in the relay store too. Check the printer's dashboard in case printing had already started.");
+  assert.match(await withdrawFromRelay(late.orderNumber, "cancelled"), new RegExp(`cancelled in the relay store, but the printer keeps orders it has already taken\\. Open the printer's dashboard, find order ${lateCopy} and cancel it there`));
   assert.equal((await getOrder(String(foreign.id)))?.status, "completed"); // someone else's order is left alone
   assert.equal((await getOrder(lateCopy))?.status, "cancelled"); // ours was still found, by its order number
   await db.update(orders).set({ externalOrderId: lateCopy, fulfillmentError: null }).where(eq(orders.id, late.id));
@@ -568,7 +568,7 @@ async function main() {
   assert.equal(`${moved.shipping.first_name} ${moved.shipping.last_name}, ${moved.shipping.address_1}, ${moved.shipping.city}`, "Alex Mover, 9 New Rd, Miami");
   assert.equal(`${moved.billing.first_name}, ${moved.billing.address_1}, ${moved.billing.email}`, "Alex, 9 New Rd, support@voidszn.com");
   await cancelOrder(db, lostReply.orderNumber, "test", "changed their mind");
-  assert.match(await withdrawFromRelay(lostReply.orderNumber, "cancelled"), /cancelled in the relay store too/);
+  assert.match(await withdrawFromRelay(lostReply.orderNumber, "cancelled"), /cancelled in the relay store, but the printer keeps/);
   assert.equal((await copiesOf(lostReply.orderNumber)).length, 0);
   assert.match(await withdrawFromRelay(first.orderNumber, "refunded"), /already finished this order when it was refunded/);
   assert.equal(await withdrawFromRelay(unknown.orderNumber, "cancelled"), "");
@@ -587,7 +587,7 @@ async function main() {
   assert.ok(await claimForRelay(db, midRefund.id));
   await shop("POST", "/orders", { status: "processing", line_items: [{ sku: sku("Black", "M"), quantity: 1 }], meta_data: [{ key: ORDER_META, value: midRefund.orderNumber }] });
   await db.update(orders).set({ status: "REFUNDED", paymentStatus: "REFUNDED", fulfillmentStatus: "CANCELLED" }).where(eq(orders.id, midRefund.id));
-  assert.match(await withdrawFromRelay(midRefund.orderNumber, "refunded"), /cancelled in the relay store too/);
+  assert.match(await withdrawFromRelay(midRefund.orderNumber, "refunded"), /cancelled in the relay store, but the printer keeps/);
   assert.equal((await copiesOf(midRefund.orderNumber)).length, 0);
   assert.equal((await flagsOn(midRefund.id)).length, 1);
   // And a send that wakes up to find its order cancelled does not release anything.
@@ -619,7 +619,7 @@ async function main() {
   const handCopy = row.externalOrderId as string;
   await failFromRelay(db, byHand.id, "test failure");
   await markInProduction(db, byHand.orderNumber, "test");
-  assert.match(await withdrawFromRelay(byHand.orderNumber, "placed by hand"), /cancelled in the relay store too/);
+  assert.match(await withdrawFromRelay(byHand.orderNumber, "placed by hand"), /cancelled in the relay store, but the printer keeps/);
   row = await state(byHand.id);
   assert.equal(`${row.status}/${row.fulfillmentProvider}/${row.externalOrderId}/${row.fulfillmentError}`, "IN_PRODUCTION/MANUAL/null/null");
   assert.equal((await getOrder(handCopy))?.status, "cancelled");

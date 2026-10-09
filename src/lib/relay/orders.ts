@@ -290,7 +290,7 @@ async function giveUp(order: ClaimedOrder, copy: WooOrder | null): Promise<Relay
       order.id,
       current.status === "completed"
         ? `This order was changed while it was being sent to the printer, and the printer has already finished its copy (order ${id} in the relay store). Check the printer's dashboard.`
-        : `This order was changed while it was being sent to the printer. Its copy in the relay store (order ${id}) was cancelled. Check the printer's dashboard in case printing had started.`,
+        : `This order was changed while it was being sent to the printer. Its copy in the relay store (order ${id}) was cancelled, but the printer keeps orders it has already taken. Find order ${id} in the printer's dashboard and cancel it there so it isn't made.`,
     );
   } catch (error) {
     console.error("[relay] Could not take back a copy", error instanceof WooError ? error.code : error);
@@ -539,19 +539,20 @@ export async function withdrawFromRelay(orderNumber: string, reason: WithdrawRea
   try {
     const { copies, complete } = await liveCopies(order);
     let finished = false;
-    let withPrinter = false;
+    const withPrinter: number[] = [];
     for (const copy of copies) {
       if (copy.status === "completed") finished = true;
       else if (HELD.has(copy.status)) await binOrder(copy.id);
       else {
         await updateOrder(copy.id, { status: "cancelled" });
-        withPrinter = true;
+        withPrinter.push(copy.id);
       }
     }
     if (finished) {
       note = `The printer had already finished this order when it was ${reason}, so it may be on its way. Check the printer's dashboard.`;
-    } else if (withPrinter) {
-      note = "It was cancelled in the relay store too. Check the printer's dashboard in case printing had already started.";
+    } else if (withPrinter.length > 0) {
+      // Printmood keeps an order it has already taken in, whatever happens to it in the shop afterwards.
+      note = `It was cancelled in the relay store, but the printer keeps orders it has already taken. Open the printer's dashboard, find order ${withPrinter.join(" and ")} and cancel it there (or leave it unconfirmed) so it isn't made.`;
     } else if (!complete) {
       note = `The relay store has too many orders to be sure no copy of this one is left there. Look for ${orderNumber} in the relay store and cancel it by hand.`;
     }
