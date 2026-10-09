@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { CollectionBrowser } from "@/components/product/collection-browser";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
-import { getCollection, getCollectionProducts, getCollections } from "@/lib/catalog";
+import { getCategories, getCollection, getCollectionProducts, getCollections } from "@/lib/catalog";
 
 type Props = PageProps<"/collections/[slug]">;
 
@@ -24,7 +24,7 @@ export default function CollectionPage({ params }: Props) {
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto w-full max-w-site flex-1 px-4 pb-24 pt-2 sm:px-10">
+      <main className="mx-auto w-full max-w-site flex-1 px-4 pb-24 pt-4 sm:px-10 sm:pt-6">
         {/* Categories added after the last deploy load here on their first visit. */}
         <Suspense fallback={<div className="min-h-[70vh]" aria-busy="true" />}>
           <CollectionContent params={params} />
@@ -40,14 +40,21 @@ async function CollectionContent({ params }: Pick<Props, "params">) {
   const collection = await getCollection(slug);
   if (!collection) notFound();
 
-  const products = await getCollectionProducts(collection.slug);
+  const [products, categories] = await Promise.all([
+    getCollectionProducts(collection.slug),
+    getCategories(),
+  ]);
+  // A category's page offers the other kind of filter: a product type can be
+  // narrowed by interest, an interest by product type. The lists offer both.
+  const here = categories.find((category) => category.slug === collection.slug);
+  const options = (kind: "PRODUCT_TYPE" | "INTEREST") =>
+    here?.kind === kind
+      ? []
+      : categories.filter((category) => category.kind === kind).map(({ slug, name }) => ({ slug, name }));
 
   return (
     <>
-      <nav
-        aria-label="Breadcrumb"
-        className="flex min-h-14 flex-wrap items-center justify-center gap-2 text-sm text-smoke"
-      >
+      <nav aria-label="Breadcrumb" className="label flex min-h-11 flex-wrap items-center gap-2 text-smoke">
         <Link href="/" className="inline-flex min-h-11 items-center hover:text-bone">
           Home
         </Link>
@@ -57,16 +64,20 @@ async function CollectionContent({ params }: Pick<Props, "params">) {
         </span>
       </nav>
 
-      <header className="flex flex-col items-center gap-4 pb-10 pt-2 text-center">
-        <h1 className="display text-[clamp(3rem,8vw,5.5rem)] text-white [text-shadow:0_0_42px_rgb(237_234_227/0.18)]">
+      <header className="flex flex-col gap-2 pb-7 pt-1">
+        <h1 className="text-[clamp(1.875rem,3.6vw,2.875rem)] font-medium leading-[1.06] tracking-[-0.015em] text-white">
           {collection.name}
         </h1>
         {collection.description ? (
-          <p className="max-w-xl text-balance text-lg text-bone-dim">{collection.description}</p>
+          <p className="max-w-xl text-bone-dim">{collection.description}</p>
         ) : null}
       </header>
 
-      <CollectionBrowser products={products} />
+      <CollectionBrowser
+        products={products}
+        filters={{ interests: options("INTEREST"), types: options("PRODUCT_TYPE") }}
+        eager
+      />
     </>
   );
 }

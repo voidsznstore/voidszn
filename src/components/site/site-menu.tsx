@@ -17,7 +17,7 @@ export function SiteMenu({ groups }: { groups: MenuGroup[] }) {
         type="button"
         onClick={() => dialogRef.current?.showModal()}
         aria-label="Open menu"
-        className="inline-flex h-11 items-center gap-2.5 rounded-full px-4 text-sm font-semibold text-bone transition-colors hover:bg-white/[0.07] hover:text-white md:hidden"
+        className="inline-flex h-11 items-center gap-2.5 rounded-full px-3.5 text-sm font-semibold text-bone transition-colors hover:bg-white/[0.07] hover:text-white md:hidden"
       >
         <span aria-hidden="true" className="flex w-4 flex-col gap-[5px]">
           <span className="h-px w-full bg-current" />
@@ -32,7 +32,7 @@ export function SiteMenu({ groups }: { groups: MenuGroup[] }) {
         onClick={(event) => {
           if (event.target === dialogRef.current) close();
         }}
-        className="glass glass-deep m-3 h-[calc(100dvh-1.5rem)] max-h-none w-[min(22rem,calc(100vw-1.5rem))] rounded-[1.75rem] p-0 text-bone backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+        className="glass glass-deep my-3 ml-auto mr-3 h-[calc(100dvh-1.5rem)] max-h-none w-[min(22rem,calc(100vw-1.5rem))] rounded-[1.75rem] p-0 text-bone backdrop:bg-black/60 backdrop:backdrop-blur-sm"
       >
         <div className="flex h-full flex-col">
           <div className="flex h-16 flex-none items-center justify-between pl-6 pr-3">

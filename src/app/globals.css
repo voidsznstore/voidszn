@@ -160,6 +160,15 @@
     background: linear-gradient(180deg, rgb(34 31 29 / 0.82), rgb(14 13 12 / 0.86));
   }
 
+  /* A sheet hanging off another sheet of glass (the header's menus). The blur
+     can't reach the page from in there, so the fill does the work instead. */
+  .glass-solid {
+    background: linear-gradient(180deg, #1e1b19, #100f0e);
+    box-shadow:
+      inset 0 1px 0 var(--glass-shine),
+      0 28px 56px -20px rgb(0 0 0 / 0.95);
+  }
+
   /* The same sheet without the blur, for panels that sit still on the page. */
   .panel {
     border: 1px solid var(--glass-edge);
@@ -465,6 +474,93 @@
     border-right: 0;
   }
 
+  /* ----- The moving banner under the header ----- */
+
+  .marquee {
+    overflow: hidden;
+    border-bottom: 1px solid var(--color-line);
+    background: linear-gradient(180deg, rgb(10 10 10 / 0.72), rgb(10 10 10 / 0.5));
+  }
+
+  /* Two identical halves side by side. Sliding left by one half loops without a seam. */
+  .marquee-track {
+    display: flex;
+    width: max-content;
+    animation: marquee var(--marquee-time, 30s) linear infinite;
+  }
+
+  .marquee:hover .marquee-track {
+    animation-play-state: paused;
+  }
+
+  .marquee-run {
+    display: flex;
+    flex: none;
+    align-items: center;
+    min-height: 2.5rem;
+    font-family: var(--font-display);
+    font-size: 0.9375rem;
+    letter-spacing: 0.09em;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* A small eclipse between one message and the next. */
+  .marquee-mark {
+    flex: none;
+    width: 0.7rem;
+    height: 0.7rem;
+    margin: 0 1.75rem;
+    border-radius: 50%;
+    background: var(--color-void);
+    box-shadow:
+      inset 0.13rem -0.1rem 0 0 var(--color-accent),
+      0 0 0 1px rgb(229 138 85 / 0.6),
+      0 0 0.6rem rgb(196 98 45 / 0.65);
+  }
+
+  /* ----- The wordmark across the foot of the page ----- */
+
+  /* Very large, and cut off along the bottom edge, with the eclipse rising behind it. */
+  .footmark {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+    /* Room above the letters for the top of the ring, then most of the letters. */
+    height: 0.98em;
+    padding-top: 0.3em;
+    font-family: var(--font-display);
+    font-size: clamp(6.5rem, 25.5vw, 22.5rem);
+    line-height: 0.8;
+    letter-spacing: 0.02em;
+    color: var(--color-bone);
+    user-select: none;
+  }
+
+  /* The ring from the logo, at the same size against the letters as it is there. */
+  .footmark-ring {
+    position: absolute;
+    top: 0.035em;
+    left: 50%;
+    width: 1.5em;
+    height: 1.5em;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 50%, #050505 0%, #0a0a0a 64%, #150d09 100%);
+    box-shadow:
+      0 0 0 2px rgb(229 138 85 / 0.75),
+      0 -0.015em 0.06em 0 rgb(229 138 85 / 0.7),
+      0 -0.04em 0.22em 0 rgb(196 98 45 / 0.5),
+      0 -0.08em 0.6em 0.02em rgb(196 98 45 / 0.22);
+    transform: translateX(-50%);
+  }
+
+  .footmark-word {
+    position: relative;
+    white-space: nowrap;
+  }
+
   /* ----- Long-form text on help and policy pages ----- */
 
   .prose-site {
@@ -556,12 +652,23 @@
   }
 }
 
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+
+  /* The banner stands still rather than racing past. */
+  .marquee-track {
+    animation: none;
   }
 }
 

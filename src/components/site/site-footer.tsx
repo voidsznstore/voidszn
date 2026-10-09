@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { EclipseLogo } from "@/components/brand/eclipse-logo";
 import { getCategories } from "@/lib/catalog";
 import { collectionLink, helpLinks, legalLinks, type NavLink } from "@/lib/navigation";
 import { siteConfig } from "@/lib/site-config";
@@ -13,7 +12,7 @@ function FooterColumn({ title, links }: { title: string; links: NavLink[] }) {
           <li key={link.href}>
             <Link
               href={link.href}
-              className="inline-flex min-h-10 items-center text-[0.9375rem] text-bone-dim transition-colors hover:text-white"
+              className="inline-flex min-h-9 items-center text-[0.9375rem] text-bone-dim transition-colors hover:text-white"
             >
               {link.label}
             </Link>
@@ -24,6 +23,10 @@ function FooterColumn({ title, links }: { title: string; links: NavLink[] }) {
   );
 }
 
+/**
+ * The foot of every page: a line about the store, the links, and the wordmark
+ * very large, cut off along the bottom with the eclipse rising behind it.
+ */
 export async function SiteFooter() {
   const categories = await getCategories();
   const linksFor = (kind: "PRODUCT_TYPE" | "INTEREST") =>
@@ -32,33 +35,39 @@ export async function SiteFooter() {
       .map((category) => collectionLink(category.name, category.slug));
 
   const shopLinks = [
+    collectionLink("Shop All", "all"),
     collectionLink("Best Sellers", "best-sellers"),
     collectionLink("Just In", "just-in"),
     ...linksFor("PRODUCT_TYPE"),
-    collectionLink("Shop All", "all"),
   ];
   const interestLinks = linksFor("INTEREST");
   // Until the legal name is filled in, the store name stands in for it.
   const owner = siteConfig.legalName.startsWith("[") ? siteConfig.name : siteConfig.legalName;
 
   return (
-    <footer className="mt-auto px-3 pb-3 sm:px-6 sm:pb-6">
-      <div className="panel mx-auto max-w-site overflow-hidden">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-10 px-6 py-12 sm:px-10 lg:grid-cols-4">
+    <footer className="mt-auto border-t border-line">
+      <div className="mx-auto grid max-w-site gap-x-10 gap-y-10 px-4 pb-10 pt-14 sm:px-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)]">
+        <p className="max-w-xs text-xl leading-snug text-bone">
+          Nothing is in season.
+          <span className="block text-smoke">Graphic tees and more, printed when you order.</span>
+        </p>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-4">
           <FooterColumn title="Shop" links={shopLinks} />
-          {interestLinks.length > 0 ? (
-            <FooterColumn title="Interests" links={interestLinks} />
-          ) : null}
+          {interestLinks.length > 0 ? <FooterColumn title="Interest" links={interestLinks} /> : null}
           <FooterColumn title="Help" links={helpLinks} />
           <FooterColumn title="Legal" links={legalLinks} />
         </div>
+      </div>
 
-        <div className="flex flex-col items-center gap-5 border-t border-line px-6 py-8 text-center sm:px-10">
-          <Link href="/" aria-label="VOIDSZN home" className="inline-flex h-12 items-center px-4">
-            <EclipseLogo size={26} />
-          </Link>
-          <p className="text-sm text-smoke">{owner}. All rights reserved.</p>
-        </div>
+      <div aria-hidden="true" className="footmark">
+        <span className="footmark-ring" />
+        <span className="footmark-word">VOIDSZN</span>
+      </div>
+
+      <div className="border-t border-line">
+        <p className="mx-auto max-w-site px-4 py-4 text-[0.8125rem] text-smoke sm:px-10">
+          {owner}. All rights reserved.
+        </p>
       </div>
     </footer>
   );

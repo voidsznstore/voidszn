@@ -38,7 +38,7 @@ export default function ProductPage({ params }: Props) {
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto w-full max-w-site flex-1 px-4 pb-24 pt-2 sm:px-10">
+      <main className="mx-auto w-full max-w-site flex-1 px-4 pb-24 pt-6 sm:px-10 sm:pt-8">
         {/* Products added after the last deploy load here on their first visit. */}
         <Suspense fallback={<div className="min-h-[70vh]" aria-busy="true" />}>
           <Product params={params} />
@@ -54,40 +54,39 @@ async function Product({ params }: Pick<Props, "params">) {
   const product = await getProductBySlug(slug);
   if (!product) notFound();
 
-  const related = await getRelatedProducts(product.slug);
+  const related = await getRelatedProducts(product.slug, 5);
+  const shopHref = `/collections/${product.typeSlug ?? "all"}`;
+
+  const crumbs = (
+    <nav aria-label="Breadcrumb" className="label flex flex-wrap items-center gap-x-2 text-smoke">
+      <Link href="/" className="inline-flex min-h-11 items-center hover:text-bone">
+        Home
+      </Link>
+      <span aria-hidden="true">/</span>
+      <Link href={shopHref} className="inline-flex min-h-11 items-center hover:text-bone">
+        {product.typeName ?? "Shop All"}
+      </Link>
+    </nav>
+  );
 
   return (
     <>
-      <nav
-        aria-label="Breadcrumb"
-        className="flex min-h-14 flex-wrap items-center gap-2 text-sm text-smoke"
-      >
-        <Link href="/" className="inline-flex min-h-11 items-center hover:text-bone">
-          Home
-        </Link>
-        <span aria-hidden="true">/</span>
-        <Link
-          href={`/collections/${product.typeSlug ?? "all"}`}
-          className="inline-flex min-h-11 items-center hover:text-bone"
-        >
-          {product.typeName ?? "Shop All"}
-        </Link>
-        <span aria-hidden="true">/</span>
-        <span aria-current="page" className="text-bone">
-          {product.name}
-        </span>
-      </nav>
-
-      <ProductView product={product} typeName={product.typeName ?? "Shop"} />
+      <ProductView product={product} crumbs={crumbs} />
 
       {related.length > 0 ? (
-        <section className="pt-24">
-          <h2 className="display mb-8 text-center text-[clamp(2rem,5vw,2.75rem)] text-white">
-            You may also like
-          </h2>
-          <div className="mx-auto grid max-w-5xl grid-cols-2 gap-x-4 gap-y-9 sm:gap-x-6 lg:grid-cols-3">
-            {related.map((item) => (
-              <ProductCard key={item.slug} product={item} />
+        <section className="pt-20">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <h2 className="label text-bone">You may also like</h2>
+            <Link href={shopHref} className="label link inline-flex min-h-11 items-center text-smoke">
+              Back to shop
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-5 md:grid-cols-3 lg:grid-cols-5">
+            {related.map((item, index) => (
+              // On a row of five the fifth only fits at full width, and a lone one looks stranded.
+              <div key={item.slug} className={index === 4 ? "hidden lg:block" : index === 3 ? "md:hidden lg:block" : ""}>
+                <ProductCard product={item} />
+              </div>
             ))}
           </div>
         </section>

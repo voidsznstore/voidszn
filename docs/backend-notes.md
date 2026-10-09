@@ -54,6 +54,10 @@ sales), just in ordered by `products.created_at`.
 - **Products:** one price per product with optional per-size prices. Every color and
   size pair is a variant row. Photos are shrunk in the browser, uploaded through
   `/api/admin/uploads` and stored in R2 (`src/lib/storage.ts`).
+- **Banner** (`/admin/banner`): the moving strip under the store's header. The owner
+  sets up to six lines, the color of the words, and whether it shows at all. It is one
+  row in `settings` (`store.banner`), read through `src/lib/banner` (cached, cleared by
+  `BANNER_TAG` on save). `BannerStrip` draws it on the store and in the admin preview.
 - **Orders:** worked by hand for now: mark as sent to the printer, then shipped with
   tracking, then delivered. Every change is written to the order's history with who
   did it.

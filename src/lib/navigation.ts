@@ -5,10 +5,10 @@ export const collectionLink = (label: string, slug: string): NavLink => ({
   href: `/collections/${slug}`,
 });
 
+/** The plain links in the header. "Category" and "Interest" open menus between them. */
 export const headerLinks: NavLink[] = [
   collectionLink("Shop All", "all"),
   collectionLink("Best Sellers", "best-sellers"),
-  collectionLink("Just In", "just-in"),
 ];
 
 export const helpLinks: NavLink[] = [
