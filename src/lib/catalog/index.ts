@@ -3,6 +3,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import { getDb, hasDatabase } from "@/db";
 import { fetchCatalog } from "@/db/queries/catalog";
 import { ALL, BEST_SELLERS, JUST_IN, sampleCatalog } from "./sample";
+import { CATALOG_TAG } from "./tag";
 import type {
   Catalog,
   CatalogCategory,
@@ -18,11 +19,10 @@ export type * from "./types";
  *
  * It is read from the database and kept in the cache, so pages don't query the
  * database on every visit. Every admin change to a product or category clears
- * the cache (see `CATALOG_TAG`), so edits show up straight away.
+ * the cache (see `CATALOG_TAG` in ./tag), so edits show up straight away.
  *
  * Checkout does not use this. It reads prices directly from the database.
  */
-export const CATALOG_TAG = "catalog";
 
 export async function getCatalog(): Promise<Catalog> {
   "use cache";

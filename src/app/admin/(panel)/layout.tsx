@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { signOut } from "@/app/admin/(auth)/actions";
-import { AdminNav } from "@/components/admin/admin-nav";
+import { AdminNav, NavLinks } from "@/components/admin/admin-nav";
 import { EclipseLogo } from "@/components/brand/eclipse-logo";
 import { getAdmin } from "@/lib/admin/session";
 
@@ -25,7 +25,9 @@ export default function PanelLayout({ children }: LayoutProps<"/admin">) {
           </Link>
           <span className="label text-xs text-smoke">Admin</span>
         </div>
-        <AdminNav />
+        <Suspense fallback={<NavLinks pathname={null} />}>
+          <AdminNav />
+        </Suspense>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm md:mt-auto md:flex-col md:items-start">
           <Suspense fallback={null}>
             <Identity />

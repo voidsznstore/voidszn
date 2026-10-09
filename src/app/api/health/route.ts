@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { connection } from "next/server";
 import { getDb } from "@/db";
 import { getSquareStatus } from "@/lib/payments/square";
+import { checkStorage } from "@/lib/storage";
 
 /**
  * Deploy check. Reports whether the site can reach its database, how many tables
@@ -12,7 +13,8 @@ export async function GET() {
   // Always answer from the live database, never from a prerendered copy.
   await connection();
 
-  const payments = await getSquareStatus();
+  const [square, images] = await Promise.all([getSquareStatus(), checkStorage()]);
+  const payments = { ...square, images };
 
   const configured = Boolean(process.env.DATABASE_URL ?? process.env.POSTGRES_URL);
   if (!configured) {

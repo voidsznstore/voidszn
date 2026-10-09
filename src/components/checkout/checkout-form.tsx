@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useCart } from "@/lib/cart-store";
 
-type Checkout =
+type CheckoutState =
   | { state: "loading" }
   | { state: "ready"; signature: string; url: string }
   | { state: "error"; signature: string; message: string };
@@ -27,9 +28,16 @@ const FALLBACK_ERROR = "Checkout could not be started. Please try again.";
  * exactly that order, then takes the customer there.
  */
 export function CheckoutForm() {
+  // Every fresh visit to checkout starts a new payment page, rather than showing
+  // the one from an earlier visit.
+  const { bfcacheId } = useRouter();
+  return <Checkout key={bfcacheId} />;
+}
+
+function Checkout() {
   const hydrated = useHydrated();
   const { lines: cart } = useCart();
-  const [checkout, setCheckout] = useState<Checkout>({ state: "loading" });
+  const [checkout, setCheckout] = useState<CheckoutState>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
 
   // Changes whenever the cart does, so the payment page always matches the cart.

@@ -10,13 +10,19 @@ const links = [
   { href: "/admin/categories", label: "Categories" },
 ];
 
+/** The nav with the current section marked. Reads the address, so it sits behind a boundary. */
 export function AdminNav() {
-  const pathname = usePathname();
+  return <NavLinks pathname={usePathname()} />;
+}
+
+/** The same links with nothing marked, shown for the instant before the address is known. */
+export function NavLinks({ pathname }: { pathname: string | null }) {
   return (
     <nav aria-label="Admin" className="flex flex-wrap gap-x-1 gap-y-1 md:flex-col">
       {links.map((link) => {
         const current =
-          link.href === "/admin" ? pathname === "/admin" : pathname.startsWith(link.href);
+          pathname !== null &&
+          (link.href === "/admin" ? pathname === "/admin" : pathname.startsWith(link.href));
         return (
           <Link
             key={link.href}
