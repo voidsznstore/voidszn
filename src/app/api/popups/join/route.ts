@@ -1,5 +1,6 @@
 import { hasDatabase } from "@/db";
 import { joinFromPopup } from "@/lib/popups/join";
+import { LIMITS, callerOf, take, tooMany } from "@/lib/rate-limit";
 
 const fail = (error: string, status: number) => Response.json({ ok: false, error }, { status });
 
@@ -9,6 +10,7 @@ const fail = (error: string, status: number) => Response.json({ ok: false, error
  */
 export async function POST(request: Request) {
   if (!hasDatabase()) return fail("Sign-ups aren't open yet.", 503);
+  if (!(await take(LIMITS.signUp, callerOf(request)))) return tooMany(LIMITS.signUp, { ok: false });
 
   let body: unknown;
   try {

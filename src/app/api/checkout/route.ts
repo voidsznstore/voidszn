@@ -1,12 +1,16 @@
 import { getDb, hasDatabase } from "@/db";
 import { saveCart } from "@/db/queries/carts";
-import { type AppliedDiscount, resolveDiscount, totalsFor } from "@/lib/checkout/discounts";
+import { saveCheckout } from "@/db/queries/checkouts";
+import { placeProblem } from "@/lib/checkout/address";
+import { type AppliedDiscount, resolveDiscountFor, totalsFor } from "@/lib/checkout/discounts";
 import { priceCart } from "@/lib/checkout/pricing";
 import { readCheckoutRequest } from "@/lib/checkout/request";
+import { type CheckoutTax, isCollectingTax, salesTaxFor } from "@/lib/checkout/tax";
 import { getAutomation } from "@/lib/email/automation";
 import { isEmailConfigured } from "@/lib/email/send";
 import { ORDER_COOKIE } from "@/lib/checkout/return";
 import { createCheckout, getWebhookKey, isSquareConfigured } from "@/lib/payments/square";
+import { LIMITS, callerOf, take, tooMany } from "@/lib/rate-limit";
 import { siteConfig } from "@/lib/site-config";
 
 /** Where to send the customer after paying. Only ever one of our own addresses. */
@@ -24,17 +28,31 @@ const fail = (error: string, status: number) => Response.json({ error }, { statu
 
 /**
  * Starts a checkout. Takes the cart (product, color, size, quantity only), an
- * email and maybe a discount code. Prices everything from the catalog on the
- * server and returns the address of Square's payment page for that exact order.
- * Nothing is saved as an order here: that happens once Square confirms the payment.
+ * email, the delivery address and maybe a discount code. Prices everything from
+ * the catalog on the server, adds sales tax for that address, and returns the
+ * address of Square's payment page for that exact order. Nothing is saved as an
+ * order here: that happens once Square confirms the payment.
  */
 export async function POST(request: Request) {
   if (!isSquareConfigured()) return fail("Checkout is opening soon.", 503);
 
+  // Every payment page is a call to Square, so one caller only gets so many.
+  const caller = callerOf(request);
+  if (!(await take(LIMITS.checkout, caller))) return tooMany(LIMITS.checkout);
+
   const read = await readCheckoutRequest(request);
   if (!read.ok) return fail(read.error, read.status);
-  const { lines, code, email, marketing } = read.data;
+  const { lines, code, email, marketing, address } = read.data;
   if (!email) return fail("Enter your email address to continue.", 400);
+
+  // The address is kept by the store until the payment comes back, which needs
+  // the database. Without one (a bare local copy) Square asks for it instead.
+  const carriesAddress = hasDatabase();
+  if (carriesAddress) {
+    if (!address) return fail("Enter your shipping address to continue.", 400);
+    const problem = placeProblem(address.state, address.postalCode);
+    if (problem) return fail(problem, 400);
+  }
 
   const priced = await priceCart(lines);
   if (!priced.ok) return fail(priced.error, 409);
@@ -43,11 +61,29 @@ export async function POST(request: Request) {
   // A code that can't be used stops checkout, so nobody pays full price by surprise.
   let discount: AppliedDiscount | null = null;
   if (code) {
-    const result = await resolveDiscount(code, cart, email);
+    const result = await resolveDiscountFor(caller, code, cart, email);
     if (!result.ok) return fail(result.error, 409);
     discount = result.discount;
   }
   const totals = totalsFor(cart, discount);
+
+  // Sales tax for where the order is going. Worked out here and nowhere else.
+  let tax: CheckoutTax | null = null;
+  if (carriesAddress && address) {
+    try {
+      if (await isCollectingTax()) tax = salesTaxFor(cart, totals, address);
+    } catch (error) {
+      // Not knowing whether to charge tax is a reason to stop, not to guess.
+      console.error("[checkout] Could not read the sales tax setting", error);
+      return fail("Checkout could not be started. Please try again.", 503);
+    }
+  }
+  const taxCents = tax?.taxCents ?? 0;
+  const totalCents = totals.totalCents + taxCents;
+
+  // One email address only gets so many payment pages too: starting checkout can
+  // lead to reminder emails, and it must not be a way to pester someone else.
+  if (!(await take(LIMITS.checkoutEmail, email))) return tooMany(LIMITS.checkoutEmail);
 
   // Make sure Square will tell us about the payment before anyone can pay. If this
   // fails the order is still saved when the customer returns to the site.
@@ -70,6 +106,8 @@ export async function POST(request: Request) {
       })),
       shippingCents: totals.shippingCents,
       discount,
+      tax: tax && taxCents > 0 ? { cents: taxCents, name: tax.receiptName } : null,
+      askForAddress: !carriesAddress,
       buyerEmail: email,
       wantsMarketing: marketing === true,
       redirectUrl: `${returnOrigin(request)}/order/confirmation`,
@@ -77,6 +115,31 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[checkout] Could not create a payment page", error);
     return fail("Checkout could not be started. Please try again.", 502);
+  }
+
+  // Keep the address for when the payment comes back. Without it the order
+  // would have nowhere to go, so failing here stops the checkout.
+  if (carriesAddress && address) {
+    try {
+      await saveCheckout(getDb(), {
+        paymentOrderRef: checkout.orderId,
+        shippingName: address.name,
+        phone: address.phone || null,
+        shippingAddress: {
+          line1: address.line1,
+          ...(address.line2 ? { line2: address.line2 } : {}),
+          city: address.city,
+          state: address.state,
+          postalCode: address.postalCode,
+          country: "US",
+        },
+        taxCents,
+        taxRateBps: tax?.rateBps ?? 0,
+      });
+    } catch (error) {
+      console.error("[checkout] Could not keep the delivery address", error);
+      return fail("Checkout could not be started. Please try again.", 502);
+    }
   }
 
   // Remember the cart, so a reminder can go out if the payment is never finished.
@@ -98,7 +161,7 @@ export async function POST(request: Request) {
             unitPriceCents: line.unitPriceCents,
             imageUrl: line.imageUrl,
           })),
-          totalCents: totals.totalCents,
+          totalCents,
           paymentOrderRef: checkout.orderId,
         });
       }

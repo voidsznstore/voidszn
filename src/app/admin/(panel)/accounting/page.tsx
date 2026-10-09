@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { AssumptionsForm, ExpenseForm, RecurringForm } from "@/components/admin/accounting-forms";
+import { AssumptionsForm, CollectTaxSwitch, ExpenseForm, RecurringForm } from "@/components/admin/accounting-forms";
 import { ConfirmButton } from "@/components/admin/confirm-button";
 import { MoneyRow, MoneyRows, TextRow } from "@/components/admin/money-rows";
 import { Loading, PageHeader } from "@/components/admin/page-header";
@@ -14,6 +14,7 @@ import { byMonth, summarize } from "@/lib/accounting/ledger";
 import { earnedIn, formatShare } from "@/lib/accounting/payouts";
 import { FEDERAL, TAX_FIGURES_YEAR, federalSetAside } from "@/lib/accounting/tax";
 import { isMaster, requireAdmin } from "@/lib/admin/session";
+import { getTaxSettings } from "@/lib/checkout/tax";
 import { formatMoney } from "@/lib/money";
 import { deleteExpenseAction, deleteRecurringAction, endRecurringAction } from "./actions";
 
@@ -64,11 +65,12 @@ async function Accounting({ searchParams }: Pick<Props, "searchParams">) {
   const period: Period = asked && asked in PERIODS ? (asked as Period) : "month";
 
   const db = getDb();
-  const [{ books, today, partners }, expenses, recurring, assumptions] = await Promise.all([
+  const [{ books, today, partners }, expenses, recurring, assumptions, taxSettings] = await Promise.all([
     loadPayoutState(db),
     listExpenses(db),
     listRecurring(db),
     getAssumptions(db),
+    getTaxSettings(db),
   ]);
 
   const range = rangeFor(period, today);
@@ -94,7 +96,8 @@ async function Accounting({ searchParams }: Pick<Props, "searchParams">) {
     return { partner, shareCents, tax: federalSetAside(shareCents, partner.incomeTaxBps) };
   });
   const federalCents = setAsides.reduce((total, row) => total + row.tax.totalCents, 0);
-  const uncollected = year.taxCollectedCents === 0 || year.salesTaxCents > year.taxCollectedCents;
+  // Some of this year's Florida orders were paid before tax was charged at checkout.
+  const partlyCollected = year.salesTaxCents > year.taxCollectedCents;
 
   const tiles: [string, string, string?][] = [
     ["Money in", formatMoney(s.moneyInCents), "Everything customers paid"],
@@ -194,14 +197,17 @@ async function Accounting({ searchParams }: Pick<Props, "searchParams">) {
             <h2 className="text-xl font-semibold text-white">Put aside for taxes</h2>
             <p className="text-sm text-smoke">{yearOf(today)} so far, whichever period is picked above.</p>
           </div>
+          <CollectTaxSwitch on={taxSettings.collect} canChange={master} />
           <MoneyRows label="Tax to put aside">
             <MoneyRow
               label="Florida sales tax"
               cents={year.salesTaxCents}
               note={
-                uncollected
-                  ? "Not charged at checkout yet, so it comes out of each Florida sale. Already taken off the profit."
-                  : "Collected at checkout and passed on. Already taken off the profit."
+                !taxSettings.collect
+                  ? "Not charged at checkout, so it comes out of each Florida sale. Already taken off the profit."
+                  : partlyCollected
+                    ? "Charged at checkout now. On orders from before that, it came out of the sale. Already taken off the profit."
+                    : "Collected at checkout and passed on. Already taken off the profit."
               }
             />
             {setAsides.map(({ partner, shareCents, tax }) => (
@@ -236,8 +242,9 @@ async function Accounting({ searchParams }: Pick<Props, "searchParams">) {
                 is delivered to (Orange County is 0.5%, so 6.5% at home). It is charged on the price after any
                 discount, and on shipping too. Orders sent out of state owe Florida nothing. Clothing at $100 or less
                 is tax-free each year from July 20 to August 20. A store in Florida has to register with the
-                Department of Revenue and charge it from the first Florida sale; if it isn&apos;t charged, the store
-                still owes it.
+                Department of Revenue (Form DR-1, online) before its first sale and charge it from then on; if
+                it isn&apos;t charged, the store still owes it. Checkout works the tax out from the delivery address
+                with these same rules.
               </p>
               <p>
                 <strong className="text-white">Sending it in.</strong> Returns are due on the 1st of the month after

@@ -6,6 +6,7 @@ import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import { CartThumb } from "@/components/cart/cart-drawer";
 import { useCartView } from "@/components/cart/use-cart-view";
 import { setDiscountCode, useCart, useDiscountCode } from "@/lib/cart-store";
+import { type ShippingDetails, US_STATES, ZIP_PATTERN, isUsState, looksLikePhone, placeProblem } from "@/lib/checkout/address";
 import type { CheckoutQuote } from "@/lib/checkout/request";
 import { formatMoney } from "@/lib/money";
 import { siteConfig } from "@/lib/site-config";
@@ -32,9 +33,50 @@ function savedEmail(): string {
   }
 }
 
+const SHIP_KEY = "voidszn-ship-v1";
+const EMPTY_SHIP: Required<ShippingDetails> = { name: "", line1: "", line2: "", city: "", state: "", postalCode: "", phone: "" };
+
 /**
- * The step before paying: what's in the order, a place for a discount code, and
- * the email the receipt goes to. The server works out every number shown here,
+ * The address typed earlier in this tab, so coming back from the payment page
+ * doesn't mean typing it again. Forgotten when the tab is closed.
+ */
+function savedShip(): Required<ShippingDetails> {
+  try {
+    const saved = JSON.parse(window.sessionStorage.getItem(SHIP_KEY) ?? "null") as Record<string, unknown> | null;
+    if (!saved || typeof saved !== "object") return EMPTY_SHIP;
+    const read = (key: keyof ShippingDetails) => (typeof saved[key] === "string" ? (saved[key] as string).slice(0, 100) : "");
+    return {
+      name: read("name"),
+      line1: read("line1"),
+      line2: read("line2"),
+      city: read("city"),
+      state: isUsState(read("state")) ? read("state") : "",
+      postalCode: read("postalCode"),
+      phone: read("phone"),
+    };
+  } catch {
+    return EMPTY_SHIP;
+  }
+}
+
+/** The first thing wrong with the address, and which field to send the customer to. */
+function shipProblem(ship: Required<ShippingDetails>): { field: keyof ShippingDetails; message: string } | null {
+  if (ship.name.trim().length < 2) return { field: "name", message: "Enter the name the parcel is for." };
+  if (ship.line1.trim().length < 3) return { field: "line1", message: "Enter your street address." };
+  if (ship.city.trim().length < 2) return { field: "city", message: "Enter your city." };
+  if (!isUsState(ship.state)) return { field: "state", message: "Pick your state." };
+  if (!ZIP_PATTERN.test(ship.postalCode.trim())) return { field: "postalCode", message: "Enter a 5-digit ZIP code." };
+  const place = placeProblem(ship.state, ship.postalCode);
+  if (place) return { field: "postalCode", message: place };
+  if (ship.phone.trim() && !looksLikePhone(ship.phone)) {
+    return { field: "phone", message: "Check the phone number, or leave it empty." };
+  }
+  return null;
+}
+
+/**
+ * The step before paying: what's in the order, a place for a discount code, the
+ * email the receipt goes to and where the order is going. The server works out every number shown here,
  * and works them out again when the payment page is opened.
  */
 export function CheckoutForm() {
@@ -55,6 +97,7 @@ function Checkout() {
   const code = useDiscountCode();
   const emailId = useId();
   const codeId = useId();
+  const shipId = useId();
 
   const [email, setEmail] = useState(savedEmail);
   // The email the totals were last worked out for. Only moves when the field is left.
@@ -63,6 +106,7 @@ function Checkout() {
   );
   // Why the last code tried didn't apply. Stays up until another is tried.
   const [codeNote, setCodeNote] = useState<string | null>(null);
+  const [ship, setShip] = useState(savedShip);
   const [marketing, setMarketing] = useState(false);
   const [codeDraft, setCodeDraft] = useState("");
   const [quoted, setQuoted] = useState<Quoted>({ state: "loading" });
@@ -75,21 +119,31 @@ function Checkout() {
   const view = useCartView(keys, true);
   const art = new Map(view?.items.map((item) => [item.key, item]));
 
-  // Changes whenever the cart or the code does, so the totals always match. The
-  // email only matters when there is a code, which may be one per customer.
+  // Sales tax depends on where the order is going. The state and ZIP code are
+  // enough to work it out, so the totals follow them as soon as both are in.
+  const destination =
+    isUsState(ship.state) && ZIP_PATTERN.test(ship.postalCode.trim())
+      ? `${ship.state} ${ship.postalCode.trim().slice(0, 5)}`
+      : "";
+
+  // Changes whenever the cart, the code or the destination does, so the totals
+  // always match. The email only matters when there is a code, which may be one
+  // per customer.
   const signature = JSON.stringify([
     cart.map((line) => [line.slug, line.color, line.size, line.quantity]),
     code,
     code ? quotedEmail : "",
+    destination,
   ]);
   const isEmpty = cart.length === 0;
 
   useEffect(() => {
     if (isEmpty) return;
     const controller = new AbortController();
-    const [lines, usedCode, usedEmail] = JSON.parse(signature) as [
+    const [lines, usedCode, usedEmail, usedDestination] = JSON.parse(signature) as [
       [string, string, string, number][],
       string | null,
+      string,
       string,
     ];
 
@@ -102,6 +156,9 @@ function Checkout() {
             lines: lines.map(([slug, color, size, quantity]) => ({ slug, color, size, quantity })),
             ...(usedCode ? { code: usedCode } : {}),
             ...(usedEmail ? { email: usedEmail } : {}),
+            ...(usedDestination
+              ? { destination: { state: usedDestination.slice(0, 2), postalCode: usedDestination.slice(3) } }
+              : {}),
           }),
           signal: controller.signal,
         });
@@ -183,7 +240,18 @@ function Checkout() {
       document.getElementById(emailId)?.focus();
       return;
     }
+    const wrong = shipProblem(ship);
+    if (wrong) {
+      setPaying({ state: "error", message: wrong.message });
+      document.getElementById(`${shipId}-${wrong.field}`)?.focus();
+      return;
+    }
     setPaying({ state: "going" });
+    try {
+      window.sessionStorage.setItem(SHIP_KEY, JSON.stringify(ship));
+    } catch {
+      // Not being able to remember the address is fine.
+    }
     // If the server turns the code down for this address, the totals are worked
     // out again for it and say why.
     setQuotedEmail(address.toLowerCase());
@@ -205,6 +273,15 @@ function Checkout() {
           ...(code && !(quote && quote.codeError) ? { code } : {}),
           email: address,
           marketing,
+          address: {
+            name: ship.name.trim(),
+            line1: ship.line1.trim(),
+            ...(ship.line2.trim() ? { line2: ship.line2.trim() } : {}),
+            city: ship.city.trim(),
+            state: ship.state,
+            postalCode: ship.postalCode.trim(),
+            ...(ship.phone.trim() ? { phone: ship.phone.trim() } : {}),
+          },
         }),
       });
       const data = (await response.json().catch(() => null)) as { url?: string; error?: string } | null;
@@ -226,6 +303,17 @@ function Checkout() {
   }
 
   const going = paying.state === "going";
+
+  /** One field of the address. Typing in any of them clears the last error. */
+  const shipField = (name: keyof ShippingDetails) => ({
+    id: `${shipId}-${name}`,
+    value: ship[name],
+    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      setShip((current) => ({ ...current, [name]: event.target.value }));
+      if (paying.state === "error") setPaying({ state: "idle" });
+    },
+  });
+  const fieldLabel = "flex flex-col gap-1.5 text-sm font-semibold";
 
   return (
     <div className="mx-auto grid max-w-5xl items-start gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
@@ -323,6 +411,11 @@ function Checkout() {
           ) : (
             <Row label="Standard shipping" value={shown ? formatMoney(shown.shippingCents) : "…"} />
           )}
+          {shown?.salesTax ? (
+            <Row label={shown.salesTax.label} value={formatMoney(shown.salesTax.cents)} />
+          ) : shown?.salesTaxPending ? (
+            <Row label="Sales tax" value={shown.addressError ? "Check your ZIP code" : "Enter your ZIP code"} />
+          ) : null}
           <div className="mt-2 flex items-baseline justify-between gap-4 border-t border-line pt-4 text-white">
             <dt className="text-base font-semibold">Total</dt>
             <dd className="num text-2xl font-semibold">{shown ? formatMoney(shown.totalCents) : "…"}</dd>
@@ -331,7 +424,7 @@ function Checkout() {
       </section>
 
       {/* Who it's for, and on to payment */}
-      <form onSubmit={pay} noValidate className="panel flex flex-col gap-5 px-5 py-6 sm:px-7 lg:sticky lg:top-28">
+      <form onSubmit={pay} noValidate className="panel flex flex-col gap-5 px-5 py-6 sm:px-7">
         <div className="flex flex-col gap-2">
           <label htmlFor={emailId} className="text-lg font-semibold text-white">
             Your email
@@ -360,6 +453,88 @@ function Checkout() {
           </p>
         </div>
 
+        <fieldset className="flex flex-col gap-3">
+          <legend className="mb-3 text-lg font-semibold text-white">Ship to</legend>
+          <label className={fieldLabel}>
+            Full name
+            <input {...shipField("name")} name="name" autoComplete="shipping name" required maxLength={80} className="input" />
+          </label>
+          <label className={fieldLabel}>
+            Street address
+            <input
+              {...shipField("line1")}
+              name="address-line1"
+              autoComplete="shipping address-line1"
+              required
+              maxLength={100}
+              className="input"
+            />
+          </label>
+          <label className={fieldLabel}>
+            <span>
+              Apartment, suite <span className="font-normal text-smoke">(optional)</span>
+            </span>
+            <input
+              {...shipField("line2")}
+              name="address-line2"
+              autoComplete="shipping address-line2"
+              maxLength={60}
+              className="input"
+            />
+          </label>
+          <label className={fieldLabel}>
+            City
+            <input
+              {...shipField("city")}
+              name="city"
+              autoComplete="shipping address-level2"
+              required
+              maxLength={60}
+              className="input"
+            />
+          </label>
+          <div className="grid grid-cols-[minmax(0,1fr)_7.5rem] gap-3">
+            <label className={fieldLabel}>
+              State
+              <select {...shipField("state")} name="state" autoComplete="shipping address-level1" required className="input">
+                <option value="">Choose…</option>
+                {US_STATES.map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={fieldLabel}>
+              ZIP code
+              <input
+                {...shipField("postalCode")}
+                name="postal-code"
+                autoComplete="shipping postal-code"
+                inputMode="numeric"
+                required
+                maxLength={10}
+                className="input"
+              />
+            </label>
+          </div>
+          <label className={fieldLabel}>
+            <span>
+              Phone <span className="font-normal text-smoke">(optional, for delivery questions)</span>
+            </span>
+            <input
+              {...shipField("phone")}
+              type="tel"
+              name="tel"
+              autoComplete="shipping tel"
+              inputMode="tel"
+              maxLength={24}
+              className="input"
+            />
+          </label>
+          <p className="text-[0.8125rem] text-smoke">We ship within {siteConfig.shipping.regions}.</p>
+        </fieldset>
+
         <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm text-bone-dim">
           <input
             type="checkbox"
@@ -384,7 +559,7 @@ function Checkout() {
         </div>
 
         <p className="border-t border-line pt-4 text-[0.8125rem] text-smoke">
-          Next you&apos;ll add your shipping address and pay on Square&apos;s secure page. Every item
+          Next you&apos;ll pay on Square&apos;s secure page. Every item
           is printed to order. If it arrives damaged or wrong, we replace or refund it within{" "}
           {siteConfig.orders.issueWindowDays} days.{" "}
           <Link href="/returns" className="link">

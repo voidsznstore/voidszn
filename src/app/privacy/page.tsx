@@ -17,7 +17,8 @@ export default function PrivacyPage() {
       policy
     >
       <p>
-        {name} is operated by {legalName} (&quot;we&quot;, &quot;us&quot;). This policy covers
+        {name} (&quot;we&quot;, &quot;us&quot;){" "}
+        {(legalName as string) === name ? "runs this site" : `is operated by ${legalName}`}. This policy covers
         this website and the orders placed on it.
       </p>
 
@@ -38,8 +39,10 @@ export default function PrivacyPage() {
           choose to submit.
         </li>
         <li>
-          <strong>Checkout details:</strong> the email address you enter at checkout and what is
-          in your cart at that moment, kept even if you don&apos;t finish paying.
+          <strong>Checkout details:</strong> the email address and delivery address you enter at
+          checkout and what is in your cart at that moment, kept even if you don&apos;t finish
+          paying. The delivery address of a checkout that is never paid for is deleted after 60
+          days.
         </li>
         <li>
           <strong>Marketing sign-up:</strong> your email address, and your phone number if you

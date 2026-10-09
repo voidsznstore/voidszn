@@ -15,6 +15,7 @@ import {
 import { isExpenseCategory } from "@/lib/accounting/categories";
 import { addMonths, dayOf, isDay } from "@/lib/accounting/days";
 import { requireAdmin, requireMaster } from "@/lib/admin/session";
+import { setCollectTax } from "@/lib/checkout/tax";
 import { parseDollars } from "@/lib/money";
 
 /** `at` changes with every success, so a form can tell a second "Added." from the first and clear itself. */
@@ -30,6 +31,25 @@ const failure = (error: unknown): MoneyFormState => {
   if (error instanceof AccountingError) return { error: error.message };
   throw error;
 };
+
+/**
+ * Switches Florida sales tax at checkout on or off. It changes what customers are
+ * charged and what is left as profit, so only the master account can.
+ */
+export async function collectTaxAction(_previous: MoneyFormState, form: FormData): Promise<MoneyFormState> {
+  await requireMaster();
+  const turn = text(form, "turn");
+  if (turn !== "on" && turn !== "off") return { error: "That didn't go through. Try again." };
+  await setCollectTax(getDb(), turn === "on");
+  refresh();
+  return {
+    done:
+      turn === "on"
+        ? "On. Orders delivered in Florida are charged sales tax from now."
+        : "Off. No sales tax is charged. Florida is still owed it on Florida orders, out of the price.",
+    at: Date.now(),
+  };
+}
 
 /** Records money the business spent. Anyone on the team can. */
 export async function addExpenseAction(_previous: MoneyFormState, form: FormData): Promise<MoneyFormState> {

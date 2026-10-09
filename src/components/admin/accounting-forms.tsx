@@ -5,6 +5,7 @@ import {
   type MoneyFormState,
   addExpenseAction,
   addRecurringAction,
+  collectTaxAction,
   saveAssumptionsAction,
 } from "@/app/admin/(panel)/accounting/actions";
 import { EXPENSE_CATEGORIES } from "@/lib/accounting/categories";
@@ -113,6 +114,43 @@ function Recurring({ today }: { today: string }) {
         </button>
         <Result state={state} />
       </div>
+    </form>
+  );
+}
+
+/** The switch for charging Florida sales tax at checkout. Only the master account can flip it. */
+export function CollectTaxSwitch({ on, canChange }: { on: boolean; canChange: boolean }) {
+  const { state, action, pending, onSubmit } = useFormAction(collectTaxAction, initial);
+  return (
+    <form action={action} onSubmit={onSubmit} className="well flex flex-col gap-2 p-4">
+      <input type="hidden" name="turn" value={on ? "off" : "on"} />
+      <div className="flex items-center justify-between gap-4">
+        <span className="flex flex-col gap-0.5">
+          <span className="font-semibold text-white">Charge sales tax at checkout</span>
+          <span className="text-[0.8125rem] text-smoke">
+            On: an order delivered in Florida pays 6% plus its county&apos;s surtax (6.5% in Orlando), on top of
+            the price. Orders to other states pay none. Off: nobody is charged, and the tax on Florida orders
+            comes out of the price instead.
+            {canChange ? "" : " Only the master account can change this."}
+          </span>
+        </span>
+        <button
+          type="submit"
+          role="switch"
+          aria-checked={on}
+          aria-label="Charge sales tax at checkout"
+          disabled={pending || !canChange}
+          className={`relative inline-flex h-7 w-12 flex-none items-center rounded-full border transition-colors disabled:opacity-50 ${
+            on ? "border-white/25 bg-accent shadow-[0_0_16px_-4px_var(--glow)]" : "border-line-strong bg-white/[0.06]"
+          }`}
+        >
+          <span
+            aria-hidden="true"
+            className={`h-5 w-5 rounded-full bg-bone shadow transition-transform ${on ? "translate-x-[1.375rem]" : "translate-x-1"}`}
+          />
+        </button>
+      </div>
+      {pending || !(state.error ?? state.done) ? null : <Result state={state} />}
     </form>
   );
 }

@@ -1,15 +1,19 @@
 import { timingSafeEqual } from "node:crypto";
 import { connection } from "next/server";
+import { getDb, hasDatabase } from "@/db";
+import { clearOldCheckouts } from "@/db/queries/checkouts";
 import { sendPendingInvites } from "@/lib/admin/invites";
 import { runCartReminders } from "@/lib/email/cart-reminders";
 import { syncProcessingFees } from "@/lib/payments/fees";
 import { followUpCardPayouts } from "@/lib/payouts/card";
+import { clearOldLimits } from "@/lib/rate-limit";
 
 /**
  * Called on a timer (see vercel.json) to do the store's small background jobs:
  * send cart reminders that are due, send admin invitations that are waiting,
- * pick up the real card fee on recent orders, and follow up payouts to
- * partners' cards. The relay store has its own job (`/api/cron/relay`).
+ * pick up the real card fee on recent orders, follow up payouts to partners'
+ * cards, and clear out what is no longer needed (old call counts, and the
+ * addresses of checkouts nobody paid for). The relay store has its own job (`/api/cron/relay`).
  *
  * It takes no input and each job only finishes work that was already waiting,
  * once, so calling it by hand does nothing a few minutes' wait wouldn't. If
@@ -43,6 +47,12 @@ export async function GET(request: Request) {
   const fees = await job("fees", syncProcessingFees);
   const cardPayouts = await job("card-payouts", followUpCardPayouts);
   const reminders = await job("cart-reminders", runCartReminders);
+  await job("tidy", async () => {
+    if (!hasDatabase()) return;
+    const db = getDb();
+    await clearOldLimits(db);
+    await clearOldCheckouts(db);
+  });
 
   // Counts only. Never who was emailed.
   const body = {

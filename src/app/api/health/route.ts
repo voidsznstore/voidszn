@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { connection } from "next/server";
 import { getDb } from "@/db";
+import { isCollectingTax } from "@/lib/checkout/tax";
 import { getSquareStatus } from "@/lib/payments/square";
 import { getStripeStatus } from "@/lib/payments/stripe";
 import { checkEmail } from "@/lib/email/send";
@@ -49,7 +50,13 @@ export async function GET() {
     const result = await getDb().execute<{ count: number }>(
       sql`select count(*)::int as count from information_schema.tables where table_schema = 'public'`,
     );
-    return Response.json({ database: "ok", tables: result.rows[0]?.count ?? 0, ...payments });
+    return Response.json({
+      database: "ok",
+      tables: result.rows[0]?.count ?? 0,
+      ...payments,
+      // Whether checkout adds Florida sales tax to orders delivered in Florida.
+      salesTax: (await isCollectingTax()) ? "on" : "off",
+    });
   } catch {
     return Response.json({ database: "unreachable", ...payments }, { status: 503 });
   }

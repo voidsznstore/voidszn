@@ -28,6 +28,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Money figures are never stored as totals. Read `docs/backend-notes.md` (Accounting,
   Payouts) and `docs/tax-notes.md` before touching `src/lib/accounting`. Never store a
   card or bank account number.
+- Checkout takes the delivery address itself and works out sales tax from it
+  (`src/lib/checkout/tax.ts`, the same rules as the books). Square is never asked for
+  an address or sent ours. Read "How checkout works" in `docs/backend-notes.md` and
+  `docs/tax-notes.md` before changing what a customer is charged.
+- Any public endpoint that writes, sends email or calls a paid service takes a limit
+  from `src/lib/rate-limit.ts` first.
 - Admin pages keep their state when you navigate away (the framework hides them instead
   of unmounting). Key forms on their data or on `useRouter().bfcacheId` so a fresh visit
   starts clean.

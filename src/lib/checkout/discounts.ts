@@ -2,6 +2,7 @@ import { getDb, hasDatabase } from "@/db";
 import { type DiscountCode, countRedemptions, findDiscountByCode, hasOrdered } from "@/db/queries/discounts";
 import { CODE_PATTERN, discountLabel, normalizeCode } from "@/lib/discounts/describe";
 import { formatMoney, percentOf } from "@/lib/money";
+import { LIMITS, isSpent, take } from "@/lib/rate-limit";
 import type { PricedCart } from "./pricing";
 
 /**
@@ -26,6 +27,8 @@ export type DiscountResult =
       error: string;
       /** True when the code is fine and only the cart falls short, so it is worth keeping. */
       canApplyLater?: boolean;
+      /** True when no such code exists. These are the tries that are counted against guessing. */
+      unknown?: boolean;
     };
 
 /** Why a code can't be used right now, or null if it can. Doesn't look at the cart. */
@@ -68,7 +71,7 @@ export async function resolveDiscount(
   email?: string | null,
 ): Promise<DiscountResult> {
   const code = normalizeCode(rawCode);
-  const unknown = { ok: false as const, error: "That code isn't valid." };
+  const unknown = { ok: false as const, error: "That code isn't valid.", unknown: true };
   if (!CODE_PATTERN.test(code) || !hasDatabase()) return unknown;
 
   const db = getDb();
@@ -98,7 +101,26 @@ export async function resolveDiscount(
   return applyCode(row, cart);
 }
 
-/** What the customer pays once a discount is taken into account. */
+/**
+ * The same check, for a caller on the public internet. Codes that don't exist are
+ * counted against the caller's network address, and after too many the answer is
+ * "wait", without looking the code up. A real code, typed right, is never counted.
+ */
+export async function resolveDiscountFor(
+  caller: string,
+  rawCode: string,
+  cart: PricedCart,
+  email?: string | null,
+): Promise<DiscountResult> {
+  if (await isSpent(LIMITS.codeGuess, caller)) {
+    return { ok: false, error: "Too many codes tried. Wait a few minutes and try again." };
+  }
+  const result = await resolveDiscount(rawCode, cart, email);
+  if (!result.ok && result.unknown) await take(LIMITS.codeGuess, caller);
+  return result;
+}
+
+/** What the customer pays before tax, once a discount is taken into account. */
 export function totalsFor(cart: PricedCart, discount: AppliedDiscount | null) {
   const discountCents = discount?.discountCents ?? 0;
   const shippingCents = discount?.freeShipping ? 0 : cart.shippingCents;

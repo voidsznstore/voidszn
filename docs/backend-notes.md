@@ -355,17 +355,47 @@ promises one thing on a policy page and another in an email.
 Payments run on Square. All Square code is in `src/lib/payments/`.
 
 - The checkout page (`/checkout`) shows the order, takes a discount code and asks for
-  an email, then hands over to Square. It gets its numbers from
-  `/api/checkout/quote`, which saves nothing.
-- The browser sends only product, color, size and quantity, the code as typed and the
-  email to `/api/checkout`. Prices, the discount and shipping are worked out on the
-  server (`src/lib/checkout/pricing.ts`, `src/lib/checkout/discounts.ts`). A code that
-  can't be used stops checkout with the reason, so nobody pays full price by surprise.
+  an email and the delivery address, then hands over to Square. It gets its numbers
+  from `/api/checkout/quote`, which saves nothing.
+- The browser sends only product, color, size and quantity, the code as typed, the
+  email and the address to `/api/checkout`. Prices, the discount, shipping and sales
+  tax are worked out on the server (`src/lib/checkout/pricing.ts`, `discounts.ts`,
+  `tax.ts`). A code that can't be used stops checkout with the reason, so nobody pays
+  full price by surprise.
 - The server creates a Square order and sends the customer to Square's hosted payment
   page for it, with the email filled in. The discount goes to Square as an order
   discount and the code's name rides along in the order's `metadata`, which is how
   the saved order knows which code was used. A free shipping code leaves the shipping
   fee off. No card data touches this site.
+- **The address is taken here, not on Square's page,** because sales tax depends on
+  it. It waits in the `checkouts` table, keyed by the Square order, and is put on the
+  order when the payment comes back. Square is told not to ask for an address
+  (`ask_for_shipping_address: false`) and is never sent ours: its `metadata` is not a
+  place for personal details. Unpaid rows are cleared after 60 days by the timed job.
+  A state and ZIP code that disagree about Florida are refused, since tax follows
+  where the parcel lands.
+- **Sales tax** (`src/lib/checkout/tax.ts`) uses the same rules as the books
+  (`src/lib/accounting/tax.ts`, sources in `docs/tax-notes.md`): orders delivered in
+  Florida pay 6% plus the delivery county's surtax, on the items after any discount
+  and on shipping; orders to other states pay nothing. It is added to the Square
+  order as a fixed charge of its own ("Florida sales tax (6.5%)", `TAX_CHARGE_UID`),
+  not as one of Square's percentage taxes, so the customer pays exactly the figure
+  the checkout page showed. When the order is read back the charge is split from
+  shipping into `orders.tax_cents`, and an order whose tax isn't what checkout worked
+  out is flagged. The switch is on the Accounting screen ("Charge sales tax at
+  checkout", master account only, on unless switched off) and `/api/health` shows
+  `salesTax`. Because the tax sits on the order as a charge, Square's own sales tax
+  report shows nothing: the Accounting screen is the record to file from.
+- **Limits on the public endpoints** (`src/lib/rate-limit.ts`, table `rate_limits`).
+  Counted per network address in fixed windows, in the database, because the site
+  runs as many short-lived copies. Opening a payment page: 15 in ten minutes per
+  address and 10 an hour per email. Pricing a cart: 150 in five minutes. Codes that
+  don't exist: 12 in ten minutes, then every code is answered "wait" (a real code
+  typed right is never counted). Pop-up sign-ups: 8 in ten minutes. Over a limit the
+  answer is 429 with `Retry-After`. Keys are hashed, so no address or email is stored
+  with the counts, and a limiter that can't reach the database lets the call through.
+  The address comes from `x-forwarded-for`, which Vercel overwrites itself. Add any
+  new public endpoint that writes, emails or calls a paid service to `LIMITS`.
 - An order is saved when Square confirms the payment. Two things trigger that, and
   whichever comes second changes nothing: Square's webhook (`/api/webhooks/square`)
   and the customer landing on the confirmation page.

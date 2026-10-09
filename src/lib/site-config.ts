@@ -12,8 +12,11 @@ export const siteConfig = {
   name: "VOIDSZN",
   /** Public address of the store. No trailing slash. */
   url: "https://www.voidszn.com",
-  /** Registered legal name of the business, e.g. "Voidszn LLC". */
-  legalName: "[LEGAL BUSINESS NAME]",
+  /**
+   * The name the business trades under. If an LLC is formed later, put its full
+   * registered name here (e.g. "Voidszn LLC") and every policy page follows.
+   */
+  legalName: "VOIDSZN",
   /** Physical mailing address. Required in marketing emails by CAN-SPAM. */
   mailingAddress: "14735 Gainsborough CT, Orlando, FL 32832",
   supportEmail: "support@voidszn.com",
@@ -26,7 +29,7 @@ export const siteConfig = {
   /** Where infringement notices go. Can be the same inbox as support. */
   legalEmail: "legal@voidszn.com",
   /** State whose law governs the terms. */
-  governingState: "[GOVERNING STATE]",
+  governingState: "Florida",
   /** Time zone the admin shows order dates in. */
   timeZone: "America/New_York",
   policiesUpdated: "October 9, 2026",

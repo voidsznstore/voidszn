@@ -1,6 +1,7 @@
 import "server-only";
 import { getDb } from "@/db";
 import { markCartsRecovered } from "@/db/queries/carts";
+import { type CarriedCheckout, findCheckout } from "@/db/queries/checkouts";
 import { findSellables } from "@/db/queries/catalog";
 import { findDiscountByCode, findDiscountById } from "@/db/queries/discounts";
 import { subscribe } from "@/db/queries/subscribers";
@@ -13,6 +14,7 @@ import {
 } from "@/db/queries/orders";
 import {
   ORDER_SOURCE,
+  TAX_CHARGE_UID,
   type SquareOrder,
   type SquarePayment,
   getOrder,
@@ -26,11 +28,16 @@ type Reading = { order: PaidOrderInput } | { problem: string };
 /**
  * Turns a completed Square payment and its order into the order to save, or says
  * what is missing. The reason never includes customer details, so it is safe to log.
+ *
+ * `carried` is the delivery address the customer gave on the store's own checkout,
+ * when there is one. It is what any sales tax was worked out for, so it is used
+ * ahead of anything Square has.
  */
 export function readSquareOrder(
   event: EventRef,
   payment: SquarePayment,
   order: SquareOrder,
+  carried: CarriedCheckout | null = null,
 ): Reading {
   // The same Square account can take payments elsewhere (in person, invoices).
   if (order.metadata?.source !== ORDER_SOURCE) return { problem: "not a site order" };
@@ -39,7 +46,17 @@ export function readSquareOrder(
 
   const fulfillment = order.fulfillments?.find((item) => item.shipment_details);
   const recipient = fulfillment?.shipment_details?.recipient;
-  const address = recipient?.address ?? payment.shipping_address;
+  const squareAddress = recipient?.address ?? payment.shipping_address;
+  const address = carried
+    ? carried.shippingAddress
+    : {
+        line1: squareAddress?.address_line_1 ?? "",
+        ...(squareAddress?.address_line_2 ? { line2: squareAddress.address_line_2 } : {}),
+        city: squareAddress?.locality ?? "",
+        state: squareAddress?.administrative_district_level_1 ?? "",
+        postalCode: squareAddress?.postal_code ?? "",
+        country: squareAddress?.country ?? "",
+      };
   const email = payment.buyer_email_address ?? recipient?.email_address;
   const total = order.total_money?.amount;
   const paid = payment.amount_money?.amount;
@@ -73,15 +90,28 @@ export function readSquareOrder(
   if (items.length === 0) return { problem: "order has no line items" };
 
   const name =
+    carried?.shippingName.trim() ||
     recipient?.display_name?.trim() ||
-    [address?.first_name, address?.last_name].filter(Boolean).join(" ") ||
+    [squareAddress?.first_name, squareAddress?.last_name].filter(Boolean).join(" ") ||
     null;
 
-  // A paid order is always saved. If Square sent no address back, it is saved
+  // A paid order is always saved. If there is no address for it, it is saved
   // without one and flagged, so someone gets it from the customer before it ships.
-  const attention = address?.address_line_1
+  const attention: string[] = address.line1
     ? []
-    : ["No shipping address came back from Square. Ask the customer for it before fulfilling."];
+    : ["No shipping address came with this order. Ask the customer for it before fulfilling."];
+
+  // Sales tax is on the order as a charge of its own, next to shipping. Anything
+  // Square worked out as tax itself (it shouldn't have) counts as tax too.
+  const taxCharge = (order.service_charges ?? []).find((charge) => charge.uid === TAX_CHARGE_UID);
+  const chargedTaxCents = taxCharge?.applied_money?.amount ?? taxCharge?.amount_money?.amount ?? 0;
+  const serviceChargesCents = order.total_service_charge_money?.amount ?? 0;
+  const taxCents = (order.total_tax_money?.amount ?? 0) + chargedTaxCents;
+  if (carried && carried.taxCents !== taxCents) {
+    attention.push(
+      "The sales tax on this payment isn't what checkout worked out. Compare it with the payment in Square.",
+    );
+  }
 
   return {
     order: {
@@ -90,22 +120,15 @@ export function readSquareOrder(
       paymentProvider: "square",
       email,
       customerName: name,
-      phone: recipient?.phone_number ?? null,
+      phone: carried?.phone ?? recipient?.phone_number ?? null,
       currency: (order.total_money?.currency ?? "USD").toLowerCase(),
       subtotalCents: items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0),
       discountCents: order.total_discount_money?.amount ?? 0,
-      shippingCents: order.total_service_charge_money?.amount ?? 0,
-      taxCents: order.total_tax_money?.amount ?? 0,
+      shippingCents: Math.max(0, serviceChargesCents - chargedTaxCents),
+      taxCents,
       totalCents: total,
       shippingName: name ?? email,
-      shippingAddress: {
-        line1: address?.address_line_1 ?? "",
-        ...(address?.address_line_2 ? { line2: address.address_line_2 } : {}),
-        city: address?.locality ?? "",
-        state: address?.administrative_district_level_1 ?? "",
-        postalCode: address?.postal_code ?? "",
-        country: address?.country ?? "",
-      },
+      shippingAddress: address,
       shippingMethod: "Standard shipping",
       discountCode: order.metadata?.discount_code ?? null,
       discountCodeId: order.metadata?.discount_id ?? null,
@@ -120,8 +143,9 @@ export function orderFromSquare(
   event: EventRef,
   payment: SquarePayment,
   order: SquareOrder,
+  carried: CarriedCheckout | null = null,
 ): PaidOrderInput | null {
-  const reading = readSquareOrder(event, payment, order);
+  const reading = readSquareOrder(event, payment, order, carried);
   return "order" in reading ? reading.order : null;
 }
 
@@ -146,8 +170,11 @@ export async function settlePayment(paymentId: string, event: EventRef): Promise
   if (!payment.order_id) return { status: "not_ours" };
 
   const order = await getOrder(payment.order_id);
-  const reading = order ? readSquareOrder(event, payment, order) : { problem: "order not found" };
   const db = getDb();
+  // The address taken on our own checkout. If it can't be read now, this fails
+  // and is tried again, rather than saving a paid order with nowhere to send it.
+  const carried = order?.metadata?.source === ORDER_SOURCE ? await findCheckout(db, payment.order_id) : null;
+  const reading = order ? readSquareOrder(event, payment, order, carried) : { problem: "order not found" };
 
   if (!("order" in reading)) {
     if (order?.metadata?.source === ORDER_SOURCE) {

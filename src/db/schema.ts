@@ -248,6 +248,24 @@ export const adminLoginAttempts = pgTable(
   (t) => [index("admin_login_attempts_key_idx").on(t.key, t.createdAt)],
 );
 
+/**
+ * Counts calls to the public endpoints (checkout, codes, sign-ups) per caller in
+ * short windows, so a script can't hammer them. The key is a hash: no network
+ * address or email is kept here in the clear. Old rows are cleared by the timed job.
+ */
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    hits: integer("hits").notNull().default(1),
+  },
+  (t) => [
+    primaryKey({ columns: [t.key, t.windowStart] }),
+    index("rate_limits_window_idx").on(t.windowStart),
+  ],
+);
+
 export const storeSettings = pgTable("store_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
@@ -978,6 +996,29 @@ export const campaignSends = pgTable(
     uniqueIndex("campaign_sends_campaign_email_uq").on(t.campaignId, t.email),
     index("campaign_sends_status_idx").on(t.campaignId, t.status),
   ],
+);
+
+/**
+ * Where an order that has gone to the payment page is to be delivered. The
+ * address is taken on the store's own checkout (sales tax depends on it), so it
+ * waits here until the payment comes back and the order is saved with it.
+ * Rows nobody paid for are cleared by the timed job.
+ */
+export const checkouts = pgTable(
+  "checkouts",
+  {
+    id: id(),
+    /** The payment provider's id for the order being paid. */
+    paymentOrderRef: text("payment_order_ref").notNull().unique(),
+    shippingName: text("shipping_name").notNull(),
+    phone: text("phone"),
+    shippingAddress: jsonb("shipping_address").$type<Address>().notNull(),
+    /** Sales tax added to the payment, and the rate it was worked out at (650 = 6.5%). */
+    taxCents: integer("tax_cents").notNull().default(0),
+    taxRateBps: integer("tax_rate_bps").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("checkouts_created_idx").on(t.createdAt)],
 );
 
 export const abandonedCarts = pgTable(

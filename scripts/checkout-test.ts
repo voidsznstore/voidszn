@@ -1,5 +1,5 @@
 /**
- * Checks for checkout pricing and the paid-order writer.
+ * Checks for checkout pricing, sales tax, call limits and the paid-order writer.
  *
  *   npm run test:checkout
  *
@@ -11,13 +11,19 @@ import { config } from "dotenv";
 config({ path: [".env.local", ".env"] });
 
 import assert from "node:assert/strict";
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import { getDb } from "../src/db";
+import { findCheckout, saveCheckout } from "../src/db/queries/checkouts";
 import { recordPaidOrder } from "../src/db/queries/orders";
-import { customers, orderItems, orders, webhookEvents } from "../src/db/schema";
+import { checkouts, customers, orderItems, orders, rateLimits, webhookEvents } from "../src/db/schema";
+import { isFloridaZip, placeProblem } from "../src/lib/checkout/address";
+import { totalsFor } from "../src/lib/checkout/discounts";
+import { addressSchema, checkoutRequestSchema } from "../src/lib/checkout/request";
+import { salesTaxFor } from "../src/lib/checkout/tax";
+import { type Limit, isSpent, take } from "../src/lib/rate-limit";
 import { sampleCatalog } from "../src/lib/catalog/sample";
 import { cartLinesSchema, priceCart, shippingFor } from "../src/lib/checkout/pricing";
-import { ORDER_SOURCE, type SquareOrder, type SquarePayment } from "../src/lib/payments/square";
+import { ORDER_SOURCE, TAX_CHARGE_UID, type SquareOrder, type SquarePayment } from "../src/lib/payments/square";
 import { orderFromSquare } from "../src/lib/payments/square-orders";
 import { siteConfig } from "../src/lib/site-config";
 
@@ -99,6 +105,85 @@ check("shipping: a hoodie and two tees charges the hoodie as the first item", ()
 check("shipping: an unknown product type uses the fallback rate", () => {
   assert.equal(shippingFor([{ typeSlug: null, quantity: 1 }]), siteConfig.shipping.fallbackRate.first);
   assert.equal(shippingFor([]), 0);
+});
+
+section("Sales tax at checkout");
+
+/** An ordinary day, outside the back-to-school tax holiday. */
+const october = new Date("2026-10-09T16:00:00Z");
+const orlando = { state: "FL", postalCode: "32832" };
+
+check("an order to Orlando pays 6.5% on the items and the shipping", async () => {
+  const priced = await priceCart([line({ quantity: 2 })]);
+  assert.ok(priced.ok);
+  const totals = totalsFor(priced.cart, null);
+  const tax = salesTaxFor(priced.cart, totals, orlando, october);
+  assert.equal(tax.rateBps, 650);
+  assert.equal(tax.taxCents, Math.round((totals.subtotalCents + totals.shippingCents) * 0.065));
+  assert.equal(tax.label, "Sales tax (6.5%)");
+  assert.equal(tax.receiptName, "Florida sales tax (6.5%)");
+});
+
+check("the tax is on the price after a discount", async () => {
+  const priced = await priceCart([line({ quantity: 2 })]);
+  assert.ok(priced.ok);
+  const discount = { id: "d", code: "TEN", label: "$10 off", discountCents: 1000, freeShipping: false };
+  const totals = totalsFor(priced.cart, discount);
+  const tax = salesTaxFor(priced.cart, totals, orlando, october);
+  assert.equal(tax.taxCents, Math.round((totals.subtotalCents - 1000 + totals.shippingCents) * 0.065));
+});
+
+check("the surtax follows the county the order is delivered to", async () => {
+  const priced = await priceCart([line()]);
+  assert.ok(priced.ok);
+  const totals = totalsFor(priced.cart, null);
+  // Miami-Dade is 1%, Hillsborough (Tampa) 1.5%, Collier (Naples) none.
+  assert.equal(salesTaxFor(priced.cart, totals, { state: "FL", postalCode: "33130" }, october).rateBps, 700);
+  assert.equal(salesTaxFor(priced.cart, totals, { state: "FL", postalCode: "33602" }, october).rateBps, 750);
+  assert.equal(salesTaxFor(priced.cart, totals, { state: "FL", postalCode: "34102" }, october).rateBps, 600);
+});
+
+check("an order to another state pays no sales tax", async () => {
+  const priced = await priceCart([line()]);
+  assert.ok(priced.ok);
+  const tax = salesTaxFor(priced.cart, totalsFor(priced.cart, null), { state: "NY", postalCode: "10001" }, october);
+  assert.equal(tax.taxCents, 0);
+  assert.equal(tax.rateBps, 0);
+  assert.equal(tax.label, "Sales tax");
+});
+
+check("clothing at $100 or less is tax-free during the summer tax holiday", async () => {
+  const priced = await priceCart([line()]);
+  assert.ok(priced.ok);
+  const totals = totalsFor(priced.cart, null);
+  assert.equal(salesTaxFor(priced.cart, totals, orlando, new Date("2026-08-01T16:00:00Z")).taxCents, 0);
+  assert.ok(salesTaxFor(priced.cart, totals, orlando, new Date("2026-08-21T16:00:00Z")).taxCents > 0);
+});
+
+check("a state and ZIP code that disagree about Florida are caught", () => {
+  assert.ok(isFloridaZip("32832") && isFloridaZip("34997") && isFloridaZip("33130-1234"));
+  assert.ok(!isFloridaZip("10001") && !isFloridaZip("34002") && !isFloridaZip("31999") && !isFloridaZip("35004"));
+  assert.match(placeProblem("FL", "10001") ?? "", /isn't in Florida/);
+  assert.match(placeProblem("GA", "32832") ?? "", /is in Florida/);
+  assert.equal(placeProblem("FL", "32832"), null);
+  assert.equal(placeProblem("NY", "10001"), null);
+});
+
+check("the address is checked before anything is charged", () => {
+  const good = { name: "Casey Buyer", line1: "9 Test Ave", city: "Orlando", state: "fl", postalCode: "32801" };
+  const parsed = addressSchema.safeParse(good);
+  assert.ok(parsed.success);
+  assert.equal(parsed.data.state, "FL");
+  assert.ok(!addressSchema.safeParse({ ...good, postalCode: "3280" }).success);
+  assert.ok(!addressSchema.safeParse({ ...good, state: "ZZ" }).success);
+  assert.ok(!addressSchema.safeParse({ ...good, line1: "" }).success);
+  assert.ok(!addressSchema.safeParse({ ...good, name: "Casey\nBuyer" }).success);
+  assert.ok(!addressSchema.safeParse({ ...good, phone: "call me" }).success);
+  assert.ok(addressSchema.safeParse({ ...good, phone: "(407) 555-0100" }).success);
+  // A half-typed ZIP code while pricing is not an error. It just can't be taxed yet.
+  const request = checkoutRequestSchema.safeParse({ lines: [line()], destination: { state: "FL", postalCode: "328" } });
+  assert.ok(request.success);
+  assert.equal(request.data.destination, undefined);
 });
 
 section("Reading a Square payment");
@@ -199,6 +284,102 @@ check("a paid order with no address is still saved, and flagged", () => {
   assert.equal(orderFromSquare(event, payment, order)?.attention, undefined);
 });
 
+const carried = {
+  shippingName: "Casey Buyer",
+  phone: "(407) 555-0100",
+  shippingAddress: { line1: "9 Test Ave", line2: "Apt 2", city: "Orlando", state: "FL", postalCode: "32832", country: "US" },
+  taxCents: 300,
+  taxRateBps: 650,
+};
+/** The same order as paid through a checkout that took the address itself and charged tax. */
+const taxedOrder: SquareOrder = {
+  ...order,
+  fulfillments: [],
+  service_charges: [
+    { name: "Standard shipping", amount_money: { amount: 524, currency: "USD" } },
+    { uid: TAX_CHARGE_UID, name: "Florida sales tax (6.5%)", amount_money: { amount: 300, currency: "USD" } },
+  ],
+  total_money: { amount: tee.priceCents * 2 + 524 + 300, currency: "USD" },
+  total_service_charge_money: { amount: 824, currency: "USD" },
+};
+const taxedPayment: SquarePayment = { ...payment, amount_money: taxedOrder.total_money };
+
+check("the address given at checkout is the one the order is saved with", () => {
+  const input = orderFromSquare(event, taxedPayment, taxedOrder, carried);
+  assert.ok(input);
+  assert.equal(input.shippingName, "Casey Buyer");
+  assert.equal(input.phone, "(407) 555-0100");
+  assert.deepEqual(input.shippingAddress, carried.shippingAddress);
+  assert.equal(input.attention, undefined);
+});
+
+check("sales tax is told apart from shipping", () => {
+  const input = orderFromSquare(event, taxedPayment, taxedOrder, carried);
+  assert.ok(input);
+  assert.equal(input.taxCents, 300);
+  assert.equal(input.shippingCents, 524);
+  assert.equal(input.totalCents, input.subtotalCents + 524 + 300);
+});
+
+check("a payment whose tax isn't what checkout worked out is flagged", () => {
+  const input = orderFromSquare(event, taxedPayment, taxedOrder, { ...carried, taxCents: 310 });
+  assert.ok(input);
+  assert.match(input.attention?.[0] ?? "", /sales tax/i);
+});
+
+async function limitChecks() {
+  if (!(process.env.DATABASE_URL ?? process.env.POSTGRES_URL)) {
+    console.log("Call limits: skipped (no DATABASE_URL)");
+    return;
+  }
+  console.log("Call limits");
+  const db = getDb();
+  const limit: Limit = { name: `test-${Date.now()}`, max: 3, windowSeconds: 3600 };
+  const before = await db.select().from(rateLimits);
+  try {
+    assert.equal(await isSpent(limit, "1.2.3.4"), false);
+    assert.deepEqual([await take(limit, "1.2.3.4"), await take(limit, "1.2.3.4"), await take(limit, "1.2.3.4")], [true, true, true]);
+    assert.equal(await take(limit, "1.2.3.4"), false);
+    assert.equal(await isSpent(limit, "1.2.3.4"), true);
+    console.log("  ok  a caller is stopped once over the limit");
+    passed += 1;
+
+    assert.equal(await take(limit, "5.6.7.8"), true);
+    assert.equal(await isSpent(limit, "5.6.7.8"), false);
+    console.log("  ok  one caller's count doesn't touch another's");
+    passed += 1;
+
+    const burst = await Promise.all(Array.from({ length: 10 }, () => take(limit, "9.9.9.9")));
+    assert.equal(burst.filter(Boolean).length, 3);
+    console.log("  ok  ten calls at the same moment let exactly the limit through");
+    passed += 1;
+
+    const rows = await db.select().from(rateLimits);
+    assert.ok(rows.every((row) => /^[0-9a-f]{40}$/.test(row.key)));
+    assert.ok(!JSON.stringify(rows).includes("1.2.3.4"));
+    console.log("  ok  no network address is stored in the clear");
+    passed += 1;
+  } finally {
+    // Leaves the table as it was found.
+    const keep = new Set(before.map((row) => `${row.key}|${row.windowStart.toISOString()}`));
+    for (const row of await db.select().from(rateLimits)) {
+      if (!keep.has(`${row.key}|${row.windowStart.toISOString()}`)) await db.delete(rateLimits).where(eq(rateLimits.key, row.key));
+    }
+  }
+
+  await db.delete(checkouts).where(like(checkouts.paymentOrderRef, "ORDERcheckouttest%"));
+  try {
+    await saveCheckout(db, { paymentOrderRef: "ORDERcheckouttest1", ...carried });
+    assert.deepEqual(await findCheckout(db, "ORDERcheckouttest1"), carried);
+    assert.equal(await findCheckout(db, "ORDERcheckouttest-none"), null);
+    await assert.rejects(saveCheckout(db, { paymentOrderRef: "ORDERcheckouttest1", ...carried }));
+    console.log("  ok  a checkout's address is kept for its payment, once");
+    passed += 1;
+  } finally {
+    await db.delete(checkouts).where(like(checkouts.paymentOrderRef, "ORDERcheckouttest%"));
+  }
+}
+
 async function orderChecks() {
   if (!(process.env.DATABASE_URL ?? process.env.POSTGRES_URL)) {
     console.log("Saving orders: skipped (no DATABASE_URL)");
@@ -268,6 +449,7 @@ async function main() {
     passed += 1;
     console.log(`  ok  ${label}`);
   }
+  await limitChecks();
   await orderChecks();
 }
 

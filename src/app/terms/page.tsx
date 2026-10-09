@@ -18,7 +18,8 @@ export default function TermsPage() {
       policy
     >
       <p>
-        {name} is operated by {legalName} (&quot;we&quot;, &quot;us&quot;). By using this site or
+        {name} (&quot;we&quot;, &quot;us&quot;){" "}
+        {(legalName as string) === name ? "runs this site" : `is operated by ${legalName}`}. By using this site or
         placing an order you agree to these terms. If you don&apos;t agree, please don&apos;t use
         the site.
       </p>

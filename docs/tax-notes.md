@@ -46,9 +46,25 @@ $250,000; some states also count 200 orders).
 [Sales Tax Institute chart](https://www.salestaxinstitute.com/resources/economic-nexus-state-guide).
 The books don't track this yet.
 
-**What the store does today.** Checkout charges no sales tax. So on every order
-delivered in Florida, the books take the tax out of what the customer paid and show it
-as owed. Once checkout charges tax, the amount collected is used instead.
+**What the store does today.** Checkout charges Florida sales tax (since October 9,
+2026). It asks for the delivery address, works the tax out with the rules above
+(`src/lib/checkout/tax.ts` calls the same `floridaSalesTax` the books use) and adds it
+to the payment as its own line. An order delivered in Orlando pays 6.5%; one delivered
+elsewhere in Florida pays 6% plus that county's surtax; one delivered to another state
+pays nothing. The books use the amount collected. For orders paid before this, or
+while "Charge sales tax at checkout" is switched off on the Accounting screen, the
+books take the tax out of what the customer paid and show it as owed.
+
+**Sole proprietor, partnership or LLC makes no difference to sales tax.** The rate
+depends on what is sold and where it is delivered, not on how the business is set up.
+How the business is set up only changes the income tax below.
+
+**Still to do by a person.** Register with the Florida Department of Revenue before
+the first real sale (Form DR-1, online). A business may not collect the tax without
+being registered, and the certificate number is what returns are filed under. A
+person trading under a name that isn't their own legal name ("VOIDSZN") also registers
+that name with the Florida Division of Corporations as a fictitious name, unless an
+LLC or corporation of that name is formed instead.
 
 ## Income tax
 

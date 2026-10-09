@@ -162,6 +162,9 @@ export type CheckoutLine = {
 /** Marks orders made by this site, so payments taken elsewhere on the same Square account are ignored. */
 export const ORDER_SOURCE = "voidszn-site";
 
+/** Names the sales tax charge on an order, so it can be told apart from shipping when the order is read back. */
+export const TAX_CHARGE_UID = "sales-tax";
+
 /**
  * Creates the Square order and its hosted payment page. Returns the page to send
  * the customer to and the id of the order they will be paying.
@@ -170,6 +173,18 @@ export async function createCheckout(input: {
   lines: CheckoutLine[];
   /** Zero when a code makes shipping free. */
   shippingCents: number;
+  /**
+   * Sales tax, already worked out for the delivery address. It goes on the order
+   * as a fixed amount under its own name, so the customer pays exactly the figure
+   * the checkout page showed. (Square's own tax lines are percentages it rounds
+   * its own way.)
+   */
+  tax?: { cents: number; name: string } | null;
+  /**
+   * False when the store has already taken the delivery address. The payment
+   * page must then not ask for another one, or the tax could be for the wrong place.
+   */
+  askForAddress: boolean;
   /** A discount code that has already been checked and priced on the server. */
   discount?: { id: string; code: string; label: string; discountCents: number } | null;
   /** Ticked "email me new designs and offers". Acted on only once they have paid. */
@@ -214,11 +229,25 @@ export async function createCheckout(input: {
             ],
           }
         : {}),
+      // Added after everything else and not itself taxed.
+      ...(input.tax && input.tax.cents > 0
+        ? {
+            service_charges: [
+              {
+                uid: TAX_CHARGE_UID,
+                name: input.tax.name,
+                amount_money: money(input.tax.cents),
+                calculation_phase: "TOTAL_PHASE",
+                taxable: false,
+              },
+            ],
+          }
+        : {}),
     },
     ...(input.buyerEmail ? { pre_populated_data: { buyer_email: input.buyerEmail } } : {}),
     checkout_options: {
       redirect_url: input.redirectUrl,
-      ask_for_shipping_address: true,
+      ask_for_shipping_address: input.askForAddress,
       ...(input.shippingCents > 0
         ? { shipping_fee: { name: "Standard shipping", charge: money(input.shippingCents) } }
         : {}),
@@ -310,6 +339,14 @@ export type SquareOrder = {
     };
   }[];
   tenders?: { id?: string; payment_id?: string }[];
+  /** Shipping, and sales tax when the store charged it. */
+  service_charges?: {
+    uid?: string;
+    name?: string;
+    amount_money?: Money;
+    applied_money?: Money;
+    total_money?: Money;
+  }[];
   total_money?: Money;
   total_tax_money?: Money;
   total_discount_money?: Money;

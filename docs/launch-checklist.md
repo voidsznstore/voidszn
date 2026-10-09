@@ -9,16 +9,21 @@ advice. Have a lawyer read the policy pages before the store takes real orders.
 - [ ] Every product on sale has real photos, a description, details and the right
       product type.
 
-- [ ] Fill every `[PLACEHOLDER]` in `src/lib/site-config.ts` (legal name, mailing address,
-      support email, legal email, governing state). The policy pages show a "Draft" notice
-      until this is done.
+- [x] Fill every `[PLACEHOLDER]` in `src/lib/site-config.ts` (legal name, mailing address,
+      support email, legal email, governing state). Done October 9, 2026: the business
+      trades as VOIDSZN under Florida law. If an LLC is formed, put its registered name
+      in `legalName`.
+- [ ] Register the name. A person or partnership trading as "VOIDSZN" rather than under
+      their own names registers it as a fictitious name with the Florida Division of
+      Corporations (sunbiz.org): $50, lasts five years, and the name has to be advertised
+      once in a local newspaper first. Forming an LLC called VOIDSZN does the same job.
 - [ ] Confirm the policy terms in `site-config.ts` with the print supplier in writing:
       production time, shipping time, cancel window, 30-day issue window. The store must
       not promise more than the supplier backs.
 - [ ] Business registration and a business bank account.
-- [ ] Sales tax: register with the state revenue department where the business is based
-      and collect tax on orders shipped there (see the Payments section for what that
-      needs in checkout), and watch for other states' thresholds as sales grow.
+- [ ] Sales tax: register with the Florida Department of Revenue (Form DR-1, online)
+      before the first real sale. Checkout already charges Florida sales tax on orders
+      delivered in Florida. Watch for other states' thresholds as sales grow.
 - [ ] Lawyer review of Privacy, Terms, Returns, Shipping and IP pages.
 
 ## Shipping promises (FTC Mail, Internet or Telephone Order Rule)
@@ -95,14 +100,16 @@ The site runs on the Sandbox access token until every item here is done.
       live mode, finds the location and registers the live webhook by itself.
 - [ ] Open `/api/health` and confirm it says `"payments":"production"` and
       `"webhook":"ok"`.
-- [ ] Sales tax is owed now, whether or not checkout charges it. A Florida business
-      registers with the Department of Revenue (Form DR-1) and owes tax from its first
-      Florida sale. Until checkout charges it, the Accounting screen takes it out of
-      each Florida order and shows what to send in. See `docs/tax-notes.md`.
-- [ ] Sales tax. Checkout charges no tax today. Square's payment page does not work
-      tax out from the delivery address, so before collecting tax: register with the
-      state, then have checkout ask for the address first and add the tax line to the
-      order. Never charge tax for a state the business is not registered in.
+- [ ] Sales tax: have the Florida certificate (Form DR-1) before the live token goes
+      in. Checkout charges Florida sales tax on orders delivered in Florida, worked out
+      from the address it asks for, and `/api/health` shows `"salesTax":"on"`. A
+      business may not collect tax it isn't registered for, so if the certificate isn't
+      there yet, switch "Charge sales tax at checkout" off on the Accounting screen
+      (the tax is still owed, out of the price). Never charge tax for a state the
+      business is not registered in. See `docs/tax-notes.md`.
+- [ ] Open one live payment page for a Florida address and check the "Florida sales
+      tax" line and the total match the checkout page, and that Square asks for no
+      second address.
 - [ ] Set the business name, logo and colors in Square (Account & Settings), which is
       what the payment page and receipts show.
 - [ ] Email: `RESEND_API_KEY` set in Vercel and voidszn.com verified in Resend.
