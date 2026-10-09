@@ -1,6 +1,7 @@
 "use server";
 
 import { and, eq, ne } from "drizzle-orm";
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb } from "@/db";
@@ -109,5 +110,17 @@ export async function changePasswordAction(
     .where(
       and(eq(adminSessions.adminId, admin.id), keep ? ne(adminSessions.tokenHash, keep) : undefined),
     );
+  return { done: true };
+}
+
+export type NameFormState = { error?: string; done?: boolean };
+
+/** Changes the name shown on this person's dashboard and next to what they do. */
+export async function renameAction(_previous: NameFormState, form: FormData): Promise<NameFormState> {
+  const admin = await requireAdmin();
+  const name = z.string().trim().min(1).max(100).safeParse(form.get("name"));
+  if (!name.success) return { error: "Enter your name." };
+  await getDb().update(adminUsers).set({ name: name.data }).where(eq(adminUsers.id, admin.id));
+  refresh();
   return { done: true };
 }

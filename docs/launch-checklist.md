@@ -92,6 +92,10 @@ The site runs on the Sandbox access token until every item here is done.
       live mode, finds the location and registers the live webhook by itself.
 - [ ] Open `/api/health` and confirm it says `"payments":"production"` and
       `"webhook":"ok"`.
+- [ ] Sales tax is owed now, whether or not checkout charges it. A Florida business
+      registers with the Department of Revenue (Form DR-1) and owes tax from its first
+      Florida sale. Until checkout charges it, the Accounting screen takes it out of
+      each Florida order and shows what to send in. See `docs/tax-notes.md`.
 - [ ] Sales tax. Checkout charges no tax today. Square's payment page does not work
       tax out from the delivery address, so before collecting tax: register with the
       state, then have checkout ask for the address first and add the tax line to the

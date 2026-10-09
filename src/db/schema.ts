@@ -13,6 +13,7 @@ import {
   type AnyPgColumn,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -140,8 +141,34 @@ export const adminUsers = pgTable("admin_users", {
   totpEnabledAt: timestamp("totp_enabled_at", { withTimezone: true }),
   /** The 30-second window of the last code accepted, so a code can't be used twice. */
   totpLastStep: integer("totp_last_step"),
+  /** Set when the master account takes this person's access away. They can't sign in after that. */
+  disabledAt: timestamp("disabled_at", { withTimezone: true }),
+  /** Where this person's payouts are sent when they are sent by hand, e.g. "Zelle 407-555-0100". Never a card number. */
+  payoutHandle: text("payout_handle"),
+  /** The federal income tax rate this person plans with, in basis points. Only used to suggest what to set aside. */
+  incomeTaxBps: integer("income_tax_bps").notNull().default(2200),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+});
+
+/**
+ * An invitation to join the admin. The account already exists, with a password
+ * nobody can type (`INVITED_PASSWORD`); following the emailed link sets a real one.
+ * The link works once and only its hash is stored. A row with no hash is waiting
+ * for its email to be sent.
+ */
+export const adminInvites = pgTable("admin_invites", {
+  id: id(),
+  adminId: uuid("admin_id")
+    .notNull()
+    .unique()
+    .references(() => adminUsers.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").unique(),
+  invitedBy: text("invited_by").notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: createdAt(),
 });
 
 /**
@@ -412,6 +439,13 @@ export const orders = pgTable(
     paidAt: timestamp("paid_at", { withTimezone: true }),
     /** How much of the total has been given back, across every refund. */
     refundedCents: integer("refunded_cents").notNull().default(0),
+    /**
+     * Internal only. What this order actually cost to make and send, typed in from
+     * the printer's bill. When empty, the cost of each item is used instead.
+     */
+    costCents: integer("cost_cents"),
+    /** Internal only. The card fee the processor took, once it has told us. */
+    processingFeeCents: integer("processing_fee_cents"),
 
     shippingName: text("shipping_name").notNull(),
     shippingAddress: jsonb("shipping_address").$type<Address>().notNull(),
@@ -439,6 +473,7 @@ export const orders = pgTable(
     index("orders_fulfillment_status_idx").on(t.fulfillmentStatus),
     index("orders_email_idx").on(t.email),
     check("orders_total_nonneg", sql`${t.totalCents} >= 0`),
+    check("orders_cost_nonneg", sql`${t.costCents} IS NULL OR ${t.costCents} >= 0`),
     check(
       "orders_refund_within_total",
       sql`${t.refundedCents} >= 0 AND ${t.refundedCents} <= ${t.totalCents}`,
@@ -645,6 +680,132 @@ export const affiliateCommissions = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("affiliate_commissions_affiliate_idx").on(t.affiliateId, t.status)],
+);
+
+/* ------------------------------------------------------------------ */
+/* Accounting and partner payouts                                      */
+/* ------------------------------------------------------------------ */
+
+/** Money the business spent that isn't tied to one order: ads, samples, filing fees. */
+export const expenses = pgTable(
+  "expenses",
+  {
+    id: id(),
+    /** The day it was spent, on the store's calendar. */
+    spentOn: date("spent_on").notNull(),
+    /** One of EXPENSE_CATEGORIES in src/lib/accounting/categories.ts. */
+    category: text("category").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    description: text("description").notNull(),
+    addedBy: text("added_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("expenses_spent_on_idx").on(t.spentOn),
+    check("expenses_amount_pos", sql`${t.amountCents} > 0`),
+  ],
+);
+
+/**
+ * A cost that repeats, like a subscription. It counts once on its start day and
+ * again every month or year after, until its end day if it has one.
+ */
+export const recurringCosts = pgTable(
+  "recurring_costs",
+  {
+    id: id(),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    /** "MONTH" or "YEAR". */
+    every: text("every").notNull(),
+    startsOn: date("starts_on").notNull(),
+    /** The last day it can be charged. Empty while it is still running. */
+    endsOn: date("ends_on"),
+    addedBy: text("added_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("recurring_costs_amount_pos", sql`${t.amountCents} > 0`),
+    check("recurring_costs_every", sql`${t.every} IN ('MONTH', 'YEAR')`),
+  ],
+);
+
+/**
+ * Each partner's share of the profit, and when it started. A change adds a row
+ * and never rewrites one, so profit made before the change keeps its old split.
+ */
+export const profitShares = pgTable(
+  "profit_shares",
+  {
+    id: id(),
+    adminId: uuid("admin_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "restrict" }),
+    /** Basis points of profit. 3333 = 33.33%. */
+    shareBps: integer("share_bps").notNull(),
+    /** The first day, on the store's calendar, this share applies to. */
+    effectiveOn: date("effective_on").notNull(),
+    setBy: text("set_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("profit_shares_admin_idx").on(t.adminId, t.effectiveOn),
+    check("profit_shares_range", sql`${t.shareBps} >= 0 AND ${t.shareBps} <= 10000`),
+  ],
+);
+
+/**
+ * Money a partner has cashed out. REQUESTED: they asked, and it has come off
+ * their balance. SENT: the money has gone. CANCELLED: it was called off and is
+ * back on their balance.
+ */
+export const partnerPayouts = pgTable(
+  "partner_payouts",
+  {
+    id: id(),
+    adminId: uuid("admin_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "restrict" }),
+    amountCents: integer("amount_cents").notNull(),
+    status: text("status").notNull().default("REQUESTED"),
+    /** How it is paid: "manual" until a card payout service is connected. */
+    method: text("method").notNull().default("manual"),
+    /** Where it was sent, as shown to people. Never a full card number. */
+    destination: text("destination"),
+    /** The sums behind the amount, exactly as they stood when it was cashed out. */
+    receipt: jsonb("receipt").$type<Record<string, unknown>>().notNull(),
+    note: text("note"),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    closedBy: text("closed_by"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("partner_payouts_admin_idx").on(t.adminId, t.requestedAt),
+    check("partner_payouts_amount_pos", sql`${t.amountCents} > 0`),
+    check("partner_payouts_status", sql`${t.status} IN ('REQUESTED', 'SENT', 'CANCELLED')`),
+  ],
+);
+
+/** A correction the master account made to one partner's balance, up or down, with the reason. */
+export const payoutAdjustments = pgTable(
+  "payout_adjustments",
+  {
+    id: id(),
+    adminId: uuid("admin_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "restrict" }),
+    /** Positive adds to the balance, negative takes away. */
+    amountCents: integer("amount_cents").notNull(),
+    reason: text("reason").notNull(),
+    addedBy: text("added_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("payout_adjustments_admin_idx").on(t.adminId),
+    check("payout_adjustments_nonzero", sql`${t.amountCents} <> 0`),
+  ],
 );
 
 /* ------------------------------------------------------------------ */

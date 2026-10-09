@@ -698,3 +698,75 @@ export function cartReminderEmail(input: {
     }),
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* The team                                                            */
+/* ------------------------------------------------------------------ */
+
+export function adminInviteEmail(input: {
+  name: string;
+  invitedBy: string;
+  url: string;
+  days: number;
+}): RenderedEmail {
+  return {
+    subject: `You've been added to the ${siteConfig.name} dashboard`,
+    ...layout(
+      "Join the team",
+      [
+        {
+          p: `Hi ${firstName(input.name)}, ${input.invitedBy} has added you to the ${siteConfig.name} dashboard: orders, customers, the inbox, campaigns, the books and your payouts.`,
+        },
+        { button: { label: "Set your name and password", url: input.url } },
+        {
+          note: `The link works once and expires in ${input.days} days. After your password you'll set up an authenticator app (Google Authenticator or any other), so have your phone handy.`,
+        },
+        { note: "If you weren't expecting this, ignore this email. Nothing happens unless the link is used." },
+      ],
+      { preheader: `Set your password to get in. The link lasts ${input.days} days.` },
+    ),
+  };
+}
+
+/** To the master account: a partner has cashed out and the money needs sending. */
+export function payoutRequestedEmail(input: {
+  partner: string;
+  amount: string;
+  sendTo: string | null;
+  url: string;
+}): RenderedEmail {
+  return {
+    subject: `${input.partner} cashed out ${input.amount}`,
+    ...layout(
+      "Payout to send",
+      [
+        { p: `${input.partner} has cashed out ${input.amount}. It has come off their balance and is waiting to be sent.` },
+        {
+          facts: [
+            ["Amount", input.amount],
+            ["Send to", input.sendTo ?? "Not set. Ask them where to send it."],
+          ],
+        },
+        { button: { label: "Open payouts", url: input.url } },
+        { note: "Once the money has gone, mark the payout as sent so they can see it." },
+      ],
+      { preheader: `${input.amount} to send.` },
+    ),
+  };
+}
+
+/** To a partner: their cash-out has been sent. */
+export function payoutSentEmail(input: { name: string; amount: string; note: string | null; url: string }): RenderedEmail {
+  return {
+    subject: `Your ${input.amount} payout has been sent`,
+    ...layout(
+      "Payout sent",
+      [
+        { p: `Hi ${firstName(input.name)}, your payout of ${input.amount} has been sent.` },
+        ...(input.note ? [{ note: input.note } as const] : []),
+        { button: { label: "See your payouts", url: input.url } },
+      ],
+      { preheader: `${input.amount} is on its way.` },
+    ),
+  };
+}

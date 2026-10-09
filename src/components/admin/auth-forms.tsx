@@ -7,12 +7,15 @@ import {
   type ResetRequestState,
   chooseNewPassword,
   createOwner,
+  joinTeam,
   requestReset,
   signIn,
 } from "@/app/admin/(auth)/actions";
 import {
+  type NameFormState,
   type PasswordFormState,
   changePasswordAction,
+  renameAction,
 } from "@/app/admin/(panel)/security/actions";
 import { useFormAction } from "./use-form-action";
 
@@ -127,6 +130,56 @@ export function SetupForm({ code, minLength }: { code: string; minLength: number
   );
 }
 
+/** Accepting an invitation to the admin: a name and a password. The email is fixed by the invitation. */
+export function JoinForm({
+  code,
+  name,
+  email,
+  minLength,
+}: {
+  code: string;
+  name: string;
+  email: string;
+  minLength: number;
+}) {
+  const { state, action, pending, onSubmit } = useFormAction(joinTeam, initial);
+  return (
+    <form action={action} onSubmit={onSubmit} className="flex flex-col gap-5">
+      <input type="hidden" name="code" value={code} />
+      <Field
+        label="Your name"
+        name="name"
+        autoComplete="name"
+        required
+        defaultValue={state.values?.name ?? name}
+        hint="Shown on your dashboard and next to anything you change."
+      />
+      <Field label="Email" type="email" value={email} readOnly autoComplete="username" hint="You'll sign in with this." />
+      <Field
+        label="Password"
+        name="password"
+        type="password"
+        autoComplete="new-password"
+        minLength={minLength}
+        required
+        hint={`At least ${minLength} characters. A few random words works well.`}
+      />
+      <Field
+        label="Password again"
+        name="confirm"
+        type="password"
+        autoComplete="new-password"
+        minLength={minLength}
+        required
+      />
+      <FormError message={state.error} />
+      <button type="submit" disabled={pending} className="btn btn-accent w-full">
+        {pending ? "Setting up your account…" : "Join the team"}
+      </button>
+    </form>
+  );
+}
+
 /** "Forgot my password": asks for the account's email. */
 export function ForgotForm() {
   const { state, action, pending, onSubmit } = useFormAction<ResetRequestState>(requestReset, {});
@@ -213,6 +266,24 @@ export function ChangePasswordForm({ minLength }: { minLength: number }) {
         </button>
         <p role="alert" aria-live="polite" className={`text-sm ${state.error ? "text-ember" : "text-smoke"}`}>
           {state.error ?? (state.done ? "Password changed. Other browsers were signed out." : "")}
+        </p>
+      </div>
+    </form>
+  );
+}
+
+/** Changing the name shown on your dashboard. */
+export function NameForm({ name }: { name: string }) {
+  const { state, action, pending, onSubmit } = useFormAction<NameFormState>(renameAction, {});
+  return (
+    <form action={action} onSubmit={onSubmit} className="flex max-w-sm flex-col gap-4">
+      <Field label="Your name" name="name" autoComplete="name" required maxLength={100} defaultValue={name} />
+      <div className="flex flex-wrap items-center gap-4">
+        <button type="submit" disabled={pending} className="btn btn-glass">
+          {pending ? "Saving…" : "Save name"}
+        </button>
+        <p role="alert" aria-live="polite" className={`text-sm ${state.error ? "text-ember" : "text-smoke"}`}>
+          {state.error ?? (state.done && !pending ? "Saved." : "")}
         </p>
       </div>
     </form>

@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, eq, gt, isNull, lt } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
@@ -79,7 +79,12 @@ export const getAdmin = cache(async (): Promise<Admin | null> => {
     .from(adminSessions)
     .innerJoin(adminUsers, eq(adminUsers.id, adminSessions.adminId))
     .where(
-      and(eq(adminSessions.tokenHash, hashToken(token)), gt(adminSessions.expiresAt, new Date())),
+      and(
+        eq(adminSessions.tokenHash, hashToken(token)),
+        gt(adminSessions.expiresAt, new Date()),
+        // Someone whose access was taken away is signed out at once, everywhere.
+        isNull(adminUsers.disabledAt),
+      ),
     )
     .limit(1);
 
@@ -116,5 +121,19 @@ export async function requireAdmin(): Promise<Admin> {
   const admin = await getAdmin();
   if (!admin) redirect("/admin/login");
   if (!admin.twoStep) redirect(ENROL_PATH);
+  return admin;
+}
+
+/**
+ * The master account is the owner's: the one account that can change how the
+ * profit is split, correct payouts, and add or remove people. Everything else in
+ * the admin is the same for everyone.
+ */
+export const isMaster = (admin: Pick<Admin, "role">) => admin.role === "OWNER";
+
+/** For pages and actions only the master account may use. Everyone else is sent to the overview. */
+export async function requireMaster(): Promise<Admin> {
+  const admin = await requireAdmin();
+  if (!isMaster(admin)) redirect("/admin");
   return admin;
 }

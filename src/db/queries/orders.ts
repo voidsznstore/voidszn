@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "../index";
+import { fillItemCosts } from "./item-costs";
 import { claimDiscountUse } from "./discounts";
 import {
   type Address,
@@ -166,6 +167,9 @@ export async function recordPaidOrder(db: Database, input: PaidOrderInput): Prom
         quantity: item.quantity,
       })),
     );
+
+    // Remember what each item cost to make, as the catalog has it today.
+    await fillItemCosts(tx, { orderId: order.id });
 
     // Count the use of the code and remember who used it. This sits in its own
     // savepoint: the customer has already paid the discounted price, so the order

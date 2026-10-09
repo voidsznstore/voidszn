@@ -11,9 +11,12 @@ const links = [
   { href: "/admin/campaigns", label: "Campaigns" },
   { href: "/admin/discounts", label: "Discounts" },
   { href: "/admin/sales", label: "Sales" },
+  { href: "/admin/accounting", label: "Accounting" },
+  { href: "/admin/payouts", label: "Payouts" },
   { href: "/admin/products", label: "Products" },
   { href: "/admin/categories", label: "Categories" },
   { href: "/admin/banner", label: "Banner" },
+  { href: "/admin/team", label: "Team" },
   { href: "/admin/security", label: "Security" },
 ];
 
@@ -27,7 +30,7 @@ export function NavLinks({ pathname }: { pathname: string | null }) {
   return (
     <nav
       aria-label="Admin"
-      className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] md:mx-0 md:flex-col md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]"
+      className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] md:mx-0 md:min-h-0 md:flex-1 md:flex-col md:gap-0.5 md:overflow-x-visible md:overflow-y-auto md:px-0 md:pb-0 md:[mask-image:none]"
     >
       {links.map((link) => {
         const current =
@@ -38,7 +41,7 @@ export function NavLinks({ pathname }: { pathname: string | null }) {
             key={link.href}
             href={link.href}
             aria-current={current ? "page" : undefined}
-            className={`inline-flex min-h-11 flex-none items-center rounded-full px-4 text-sm font-semibold transition-colors ${
+            className={`inline-flex min-h-11 flex-none items-center rounded-full px-4 text-sm font-semibold transition-colors md:min-h-10 ${
               current
                 ? "bg-bone text-void shadow-[0_8px_22px_-12px_rgb(237_234_227/0.6)]"
                 : "text-bone-dim hover:bg-white/[0.07] hover:text-white"

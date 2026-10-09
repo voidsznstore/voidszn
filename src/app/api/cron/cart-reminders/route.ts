@@ -1,11 +1,15 @@
 import { timingSafeEqual } from "node:crypto";
 import { connection } from "next/server";
+import { sendPendingInvites } from "@/lib/admin/invites";
 import { runCartReminders } from "@/lib/email/cart-reminders";
+import { syncProcessingFees } from "@/lib/payments/fees";
 
 /**
- * Called on a timer (see vercel.json) to send cart reminders that are due.
+ * Called on a timer (see vercel.json) to do the store's small background jobs:
+ * send cart reminders that are due, send admin invitations that are waiting,
+ * and pick up the real card fee on recent orders.
  *
- * It takes no input and only ever sends reminders that were already due, each
+ * It takes no input and each job only finishes work that was already waiting,
  * once, so calling it by hand does nothing a few minutes' wait wouldn't. If
  * CRON_SECRET is set in the hosting settings, callers must present it.
  */
@@ -24,12 +28,25 @@ export async function GET(request: Request) {
     }
   }
 
-  try {
-    const run = await runCartReminders();
-    // Counts only. Never who was emailed.
-    return Response.json(run);
-  } catch (error) {
-    console.error("[cart-reminders] Run failed", error);
-    return Response.json({ error: "Failed" }, { status: 500 });
-  }
+  // Each job on its own, so one failing doesn't hold up the others.
+  const job = async <T>(name: string, run: () => Promise<T>): Promise<T | "failed"> => {
+    try {
+      return await run();
+    } catch (error) {
+      console.error(`[cron] ${name} failed`, error);
+      return "failed";
+    }
+  };
+  const invites = await job("invites", sendPendingInvites);
+  const fees = await job("fees", syncProcessingFees);
+  const reminders = await job("cart-reminders", runCartReminders);
+
+  // Counts only. Never who was emailed.
+  const body = {
+    ...(reminders === "failed" ? { sent: 0, failed: 0 } : reminders),
+    invites,
+    fees,
+  };
+  const failed = reminders === "failed" || invites === "failed" || fees === "failed";
+  return Response.json(failed ? { ...body, error: "Failed" } : body, { status: failed ? 500 : 200 });
 }

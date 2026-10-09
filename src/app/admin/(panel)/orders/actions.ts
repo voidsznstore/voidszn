@@ -24,7 +24,9 @@ import {
   createManualOrder,
   markPaid,
 } from "@/db/queries/admin-manual-orders";
+import { AccountingError, setOrderCost } from "@/db/queries/accounting";
 import { requireAdmin } from "@/lib/admin/session";
+import { parseDollars } from "@/lib/money";
 import {
   sendOrderCancelled,
   sendOrderDelivered,
@@ -260,6 +262,22 @@ export async function noteAction(_previous: OrderActionState, form: FormData) {
     const note = text(1000).min(1).safeParse(form.get("note"));
     if (!note.success) return { error: "Write a note first." };
     await addNote(getDb(), number, actor, note.data);
+  });
+}
+
+/** What the order really cost to make and send. Left empty, it goes back to the items' own costs. */
+export async function costAction(_previous: OrderActionState, form: FormData) {
+  await requireAdmin();
+  const raw = typeof form.get("cost") === "string" ? String(form.get("cost")).trim() : "";
+  const cents = raw === "" ? null : parseDollars(raw);
+  if (raw !== "" && cents === null) return { error: "Enter the cost as a number, like 14 or 14.25." };
+  return run(form, cents === null ? "Cleared." : "Saved.", async (number, actor) => {
+    try {
+      await setOrderCost(getDb(), number, actor, cents);
+    } catch (error) {
+      if (error instanceof AccountingError) return { error: error.message };
+      throw error;
+    }
   });
 }
 

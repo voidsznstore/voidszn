@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Loading, PageHeader } from "@/components/admin/page-header";
-import { ChangePasswordForm } from "@/components/admin/auth-forms";
+import { ChangePasswordForm, NameForm } from "@/components/admin/auth-forms";
 import { SecurityCodeForm } from "@/components/admin/two-step-forms";
 import { MIN_PASSWORD_LENGTH } from "@/lib/admin/passwords";
 import { requireAdmin } from "@/lib/admin/session";
@@ -36,6 +36,12 @@ async function Security({ searchParams }: Pick<Props, "searchParams">) {
           for good, set up the authenticator app on your new one below.
         </p>
       ) : null}
+
+      <section className={panel}>
+        <h2 className="text-lg font-semibold text-white">Your name</h2>
+        <p className="text-bone-dim">Shown on your dashboard, on the Team screen and on payouts.</p>
+        <NameForm name={admin.name} />
+      </section>
 
       <section className={panel}>
         <h2 className="text-lg font-semibold text-white">Two-step sign-in</h2>

@@ -54,6 +54,54 @@ sales), just in ordered by `products.created_at`.
 - **Products:** one price per product with optional per-size prices. Every color and
   size pair is a variant row. Photos are shrunk in the browser, uploaded through
   `/api/admin/uploads` and stored in R2 (`src/lib/storage.ts`).
+- **Team** (`/admin/team`): everyone shares one dashboard and one set of data. The
+  first account (`role = OWNER`) is the **master account**: voidsznstore@gmail.com,
+  Henry Palacios. When the owner says "my dashboard" he means that account. It alone
+  can invite or remove people, change profit shares, correct balances, settle
+  payouts and edit the stand-in figures; those actions call `requireMaster()`.
+  Everyone else is `STAFF` and can do everything else.
+  - Inviting (`src/lib/admin/invites.ts`) makes the account straight away with a
+    password that can't be typed (`!invited`) and emails a link to `/admin/join`.
+    The link works once, for a week, and only its hash is stored. The timed job
+    sends any invitation still waiting, which is how the two partner accounts added
+    by migration 0009 got theirs.
+  - "Remove access" sets `admin_users.disabled_at`. That signs the person out
+    everywhere on their next request and blocks sign-in and password reset.
+- **Accounting** (`/admin/accounting`): nothing is stored as a total. The books are
+  rebuilt from the orders and the costs every time (`src/lib/accounting/ledger.ts`,
+  loaded by `src/db/queries/accounting.ts`), by day in the store's time zone.
+  - Money in is what customers paid. Money out is refunds, sales tax owed, the cost
+    of goods, card fees and expenses. Profit is one less the other.
+  - Cost of goods: the printer's bill typed on the order (`orders.cost_cents`), or
+    else each line's `unit_cost_cents`, copied from the product when the order is
+    saved. Saving a cost on a product fills it in on past orders that had none.
+  - Card fee: the real one from Square once the timed job has it
+    (`orders.processing_fee_cents`), the stand-in rate until then.
+  - Expenses are one-off (`expenses`) or repeating (`recurring_costs`, counted on
+    their day each month or year with nothing to enter).
+  - Sales tax and the tax set-aside: see `docs/tax-notes.md`.
+  - An order added by hand and then cancelled is left out of the books.
+  - Anyone can add an expense or a subscription. Removing or stopping one raises
+    every balance, so that is for the master account.
+  - Known gap: a refund or chargeback made in Square's own dashboard, not from the
+    order page here, never reaches the books.
+- **Payouts** (`/admin/payouts`, `src/lib/accounting/payouts.ts`,
+  `src/db/queries/payouts.ts`): a partner's balance is their share of all profit to
+  date, plus or minus corrections, less everything cashed out. Cashing out takes
+  the whole balance, so it returns to $0.
+  - Shares are rows in `profit_shares` with a start day. A change adds a row, so
+    earlier profit keeps its old split. Shares can't total more than 100%.
+  - The amount is always worked out on the server inside an advisory lock. The
+    browser sends nothing but the click.
+  - A payout is REQUESTED, then SENT or CANCELLED by the master account. Each keeps
+    a copy of the sums behind it (`receipt`).
+  - Nobody can cash out while a paid order has no cost recorded, because that
+    order would be counted as pure profit.
+  - Because profit is recomputed, a refund or cost that arrives after a cash-out
+    takes the balance below zero. Available stays $0 until new profit covers it.
+  - Money is sent by hand for now (`method = "manual"`); the partner says where in
+    `admin_users.payout_handle`. Never store a card or bank number. A card payout
+    service would plug in at `requestPayout` and the "Where it goes" panel.
 - **Banner** (`/admin/banner`): the moving strip under the store's header. The owner
   sets up to six lines, the color of the words, and whether it shows at all. It is one
   row in `settings` (`store.banner`), read through `src/lib/banner` (cached, cleared by
@@ -182,6 +230,19 @@ sales), just in ordered by `products.created_at`.
 
 Not built yet: staff accounts, the "delayed order" email, the fulfilment connection
 to the printer, a newsletter sign-up form on the store.
+
+## When a page fails to load
+
+`src/app/error.tsx` and `src/app/global-error.tsx` both show
+`src/components/site/load-error.tsx`. The first failure on an address reloads the page
+once, quietly; a second within 30 seconds shows a message with a "Try again" button.
+
+This is there for one known case. Saving in the admin clears the store's cache with
+`updateTag`. Until a page has been rebuilt, a visitor who follows a link to it before
+the link has been prefetched (a menu or footer link tapped quickly) can be sent half an
+answer by the framework, which React reports as "Connection closed". A full page load
+always gets the whole page, so the reload fixes it. `revalidateTag(tag, "max")` avoids
+the error but left the store showing the old content, so it isn't used.
 
 ## Forms that need the backend
 

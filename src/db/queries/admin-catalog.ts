@@ -8,6 +8,7 @@ import {
   productVariants,
   products,
 } from "../schema";
+import { fillItemCosts } from "./item-costs";
 
 export type CategoryKind = "PRODUCT_TYPE" | "INTEREST";
 
@@ -327,8 +328,10 @@ export type ProductDraft = {
   typeId: string | null;
   interestIds: string[];
   colors: { id?: string; name: string; hex: string }[];
-  /** `priceCents` null means "same as the product price". */
-  sizes: { size: string; priceCents: number | null }[];
+  /** What the printer charges for one, before their shipping. Never shown to customers. Null when not known. */
+  costCents: number | null;
+  /** `priceCents` null means "same as the product price". `costCents` null means "same as the product cost". */
+  sizes: { size: string; priceCents: number | null; costCents: number | null }[];
   /** `color` is an index into `colors`, or null when the photo is for every color. */
   images: {
     id?: string;
@@ -367,10 +370,15 @@ export async function getProductDraft(db: Database, id: string): Promise<Product
       .where(eq(productCategories.productId, id)),
   ]);
 
-  const sizes = new Map<string, number>();
+  const sizes = new Map<string, { priceCents: number; costCents: number | null }>();
   for (const variant of variants) {
-    if (!sizes.has(variant.size)) sizes.set(variant.size, variant.priceCents);
+    if (!sizes.has(variant.size)) {
+      sizes.set(variant.size, { priceCents: variant.priceCents, costCents: variant.costCents });
+    }
   }
+  // The product's own cost is the cheapest size's. Sizes that cost more show the difference.
+  const knownCosts = [...sizes.values()].flatMap((size) => (size.costCents === null ? [] : [size.costCents]));
+  const costCents = knownCosts.length > 0 ? Math.min(...knownCosts) : null;
 
   return {
     id: product.id,
@@ -379,6 +387,7 @@ export async function getProductDraft(db: Database, id: string): Promise<Product
     isActive: product.isActive,
     priceCents: product.priceCents,
     compareAtPriceCents: product.compareAtPriceCents,
+    costCents,
     shortDescription: product.shortDescription ?? "",
     description: product.description ?? "",
     detailsText: product.detailsText ?? "",
@@ -386,9 +395,10 @@ export async function getProductDraft(db: Database, id: string): Promise<Product
     typeId: links.find((link) => link.kind === "PRODUCT_TYPE")?.id ?? null,
     interestIds: links.filter((link) => link.kind === "INTEREST").map((link) => link.id),
     colors: colors.map((color) => ({ id: color.id, name: color.name, hex: color.hex })),
-    sizes: [...sizes].map(([size, priceCents]) => ({
+    sizes: [...sizes].map(([size, { priceCents, costCents: sizeCost }]) => ({
       size,
       priceCents: priceCents === product.priceCents ? null : priceCents,
+      costCents: sizeCost === costCents ? null : sizeCost,
     })),
     images: images.map((image) => {
       const index = colors.findIndex((color) => color.id === image.colorId);
@@ -497,6 +507,7 @@ export async function saveProduct(
         size: size.size,
         sku: skuFor(draft.slug, draft.colors[colorIndex].name, size.size),
         priceCents: sizePrices[sizeIndex],
+        costCents: size.costCents ?? draft.costCents,
         sortOrder: sizeIndex,
       })),
     );
@@ -600,6 +611,9 @@ export async function saveProduct(
         await tx.insert(productImages).values({ productId, url: image.url, ...values });
       }
     }
+
+    // Past orders of this product that had no cost recorded pick up the one just saved.
+    await fillItemCosts(tx, { productId });
 
     return { id: productId, removedImageUrls: removed.map((image) => image.url) };
   });

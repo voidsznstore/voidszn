@@ -281,6 +281,11 @@ export type SquarePayment = {
   buyer_email_address?: string;
   shipping_address?: SquareAddress;
   receipt_url?: string;
+  /**
+   * What Square took for handling the payment, and any later corrections. It is
+   * filled in a little after the payment completes, so it can be missing at first.
+   */
+  processing_fee?: { type?: string; amount_money?: Money }[];
 };
 
 export type SquareOrder = {

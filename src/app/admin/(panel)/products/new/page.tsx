@@ -14,6 +14,7 @@ const BLANK: ProductDraft = {
   slug: "",
   isActive: false,
   priceCents: 0,
+  costCents: null,
   compareAtPriceCents: null,
   shortDescription: "",
   description: "",
@@ -22,7 +23,7 @@ const BLANK: ProductDraft = {
   typeId: null,
   interestIds: [],
   colors: [],
-  sizes: ["S", "M", "L", "XL", "2XL"].map((size) => ({ size, priceCents: null })),
+  sizes: ["S", "M", "L", "XL", "2XL"].map((size) => ({ size, priceCents: null, costCents: null })),
   images: [],
 };
 

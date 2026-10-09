@@ -18,6 +18,7 @@ import { siteConfig } from "@/lib/site-config";
 import {
   addressAction,
   cancelAction,
+  costAction,
   deliveredAction,
   inProductionAction,
   noteAction,
@@ -119,6 +120,9 @@ async function Order({ params }: Pick<Props, "params">) {
   const emailsOn = isEmailConfigured();
   const refundable = order.totalCents - order.refundedCents;
   const canRefund = order.paymentProvider === "square" && Boolean(order.paymentRef) && refundable > 0;
+  // What the order cost to make: the typed-in bill if there is one, else the items' own costs.
+  const itemsCost = items.reduce((total, item) => total + (item.unitCostCents ?? 0) * item.quantity, 0);
+  const missingCosts = items.filter((item) => item.unitCostCents === null).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -574,6 +578,43 @@ async function Order({ params }: Pick<Props, "params">) {
               </details>
             ) : null}
           </section>
+
+          {!unpaid ? (
+            <section className={panel}>
+              <h2 className={heading}>What it cost</h2>
+              <p className="num text-2xl font-semibold text-white">
+                {order.costCents !== null
+                  ? formatMoney(order.costCents)
+                  : missingCosts === items.length
+                    ? "Not known"
+                    : formatMoney(itemsCost)}
+              </p>
+              <p className={small}>
+                {order.costCents !== null
+                  ? "Typed in from the printer's bill."
+                  : missingCosts > 0
+                    ? `${missingCosts === items.length ? "None" : "Not all"} of these items have a cost on their product page, so the books count this order as more profit than it is.`
+                    : "Worked out from what each item costs on its product page. Type in the printer's bill to make it exact."}
+                {order.processingFeeCents !== null
+                  ? ` Card fee: ${formatMoney(order.processingFeeCents)}.`
+                  : ""}
+              </p>
+              <OrderActionForm action={costAction} orderNumber={order.orderNumber} submitLabel="Save cost">
+                <label className="flex flex-col gap-2 text-sm font-semibold" htmlFor="field-cost">
+                  Printer&apos;s bill for this order (USD)
+                  <input
+                    id="field-cost"
+                    name="cost"
+                    inputMode="decimal"
+                    defaultValue={order.costCents !== null ? (order.costCents / 100).toFixed(2) : ""}
+                    placeholder="Items and their shipping, e.g. 14.25"
+                    autoComplete="off"
+                    className="input"
+                  />
+                </label>
+              </OrderActionForm>
+            </section>
+          ) : null}
 
           {open ? (
             <section className={panel}>

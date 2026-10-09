@@ -22,11 +22,18 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 export async function requestPasswordReset(email: string): Promise<void> {
   const db = getDb();
   const [admin] = await db
-    .select({ id: adminUsers.id, name: adminUsers.name, email: adminUsers.email })
+    .select({
+      id: adminUsers.id,
+      name: adminUsers.name,
+      email: adminUsers.email,
+      passwordHash: adminUsers.passwordHash,
+      disabledAt: adminUsers.disabledAt,
+    })
     .from(adminUsers)
     .where(eq(adminUsers.email, email))
     .limit(1);
-  if (!admin) return;
+  // Not for someone whose access was taken away, or who hasn't accepted their invitation yet.
+  if (!admin || admin.disabledAt || admin.passwordHash.startsWith("!")) return;
 
   const token = randomBytes(32).toString("base64url");
   await db.delete(adminPasswordResets).where(lt(adminPasswordResets.expiresAt, new Date()));
@@ -77,7 +84,12 @@ export async function resetPassword(token: string, password: string): Promise<bo
       .returning({ adminId: adminPasswordResets.adminId });
     if (!used) return false;
 
-    await tx.update(adminUsers).set({ passwordHash }).where(eq(adminUsers.id, used.adminId));
+    const [changed] = await tx
+      .update(adminUsers)
+      .set({ passwordHash })
+      .where(and(eq(adminUsers.id, used.adminId), isNull(adminUsers.disabledAt)))
+      .returning({ id: adminUsers.id });
+    if (!changed) return false;
     await tx.delete(adminSessions).where(eq(adminSessions.adminId, used.adminId));
     await tx
       .delete(adminPasswordResets)

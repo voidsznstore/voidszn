@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb } from "@/db";
@@ -13,6 +13,7 @@ import {
   verifyPassword,
 } from "@/lib/admin/passwords";
 import { requestPasswordReset, resetPassword } from "@/lib/admin/password-reset";
+import { acceptInvite } from "@/lib/admin/invites";
 import { createSession, destroySession, requireSignedIn } from "@/lib/admin/session";
 import { SETUP_SETTING, isSetupCodeValid } from "@/lib/admin/setup";
 import { isEmailConfigured } from "@/lib/email/send";
@@ -69,14 +70,18 @@ export async function signIn(_previous: AuthFormState, form: FormData): Promise<
       totpEnabledAt: adminUsers.totpEnabledAt,
     })
     .from(adminUsers)
-    .where(eq(adminUsers.email, parsed.data.email))
+    // Someone whose access was taken away gets the same answer as a wrong password.
+    .where(and(eq(adminUsers.email, parsed.data.email), isNull(adminUsers.disabledAt)))
     .limit(1);
 
+  // An account that hasn't accepted its invitation has no real password yet. It
+  // is checked against the decoy too, so it takes as long to refuse as any other.
+  const hasPassword = admin?.passwordHash.startsWith("scrypt$") ?? false;
   const matches = await verifyPassword(
     parsed.data.password,
-    admin?.passwordHash ?? (await decoyHash()),
+    admin && hasPassword ? admin.passwordHash : await decoyHash(),
   );
-  if (!admin || !matches) {
+  if (!admin || !hasPassword || !matches) {
     await recordFailure(keys);
     return wrong;
   }
@@ -274,4 +279,46 @@ export async function chooseNewPassword(
     return { error: "This reset link is no longer valid. Ask for a new one." };
   }
   redirect("/admin/login?reset=1");
+}
+
+/** Accepting an invitation: the new person sets their name and a password. */
+export async function joinTeam(_previous: AuthFormState, form: FormData): Promise<AuthFormState> {
+  const text = (name: string) => (typeof form.get(name) === "string" ? String(form.get(name)) : "");
+  const values = { name: text("name") };
+  const gone = "This invitation is no longer valid. Ask for a new one.";
+
+  const parsed = z
+    .object({
+      code: z.string().min(20).max(100),
+      name: z.string().trim().min(1, "Enter your name.").max(100),
+      password: z
+        .string()
+        .min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters.`)
+        .max(MAX_PASSWORD_LENGTH),
+      confirm: z.string(),
+    })
+    .safeParse({
+      code: form.get("code"),
+      name: form.get("name"),
+      password: form.get("password"),
+      confirm: form.get("confirm"),
+    });
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { error: issue?.path[0] === "code" ? gone : (issue?.message ?? "Check the form and try again."), values };
+  }
+  if (parsed.data.password !== parsed.data.confirm) {
+    return { error: "The two passwords don't match.", values };
+  }
+
+  const key = `join:${await clientAddress()}`;
+  if (await isOverLimit(key, 20)) return { error: LOCKOUT_MESSAGE, values };
+  await countAgainst(key);
+
+  const adminId = await acceptInvite(parsed.data.code, parsed.data.name, parsed.data.password);
+  if (!adminId) return { error: gone, values };
+
+  // Signed in, and the admin sends them to set up their authenticator app next.
+  await createSession(adminId);
+  redirect("/admin");
 }

@@ -26,6 +26,7 @@ const draftSchema = z.object({
   isActive: z.boolean(),
   priceCents: cents,
   compareAtPriceCents: cents.nullable(),
+  costCents: cents.nullable(),
   shortDescription: text(300),
   description: text(5000),
   detailsText: text(5000),
@@ -46,6 +47,7 @@ const draftSchema = z.object({
       z.object({
         size: text(12).min(1, "Every size needs a label."),
         priceCents: cents.nullable(),
+        costCents: cents.nullable(),
       }),
     )
     .max(20),

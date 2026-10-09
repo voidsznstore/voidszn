@@ -19,7 +19,8 @@
     "test:manual-order": "tsx scripts/manual-order-test.ts",
     "test:inbox": "tsx --conditions=react-server scripts/inbox-test.ts",
     "test:campaign": "tsx --conditions=react-server scripts/campaign-test.ts",
-    "test:discounts": "tsx --conditions=react-server scripts/discount-test.ts"
+    "test:discounts": "tsx --conditions=react-server scripts/discount-test.ts",
+    "test:accounting": "tsx --conditions=react-server scripts/accounting-test.ts"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",

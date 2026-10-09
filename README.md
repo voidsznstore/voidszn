@@ -37,6 +37,7 @@ npm run dev                  # http://localhost:3000
 | `npm run test:checkout` | Pricing and the paid-order writer |
 | `npm run test:discounts` | Discount codes, saved carts, email contents, admin dates |
 | `npm run test:campaign` | Campaign sending never reaches anyone twice |
+| `npm run test:accounting` | The books, sales tax, partner payouts and team invitations |
 
 ## Changing the database
 

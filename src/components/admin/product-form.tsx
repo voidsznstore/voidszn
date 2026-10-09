@@ -11,7 +11,7 @@ import { uploadPhoto } from "./photo-upload";
 type CategoryOption = { id: string; kind: "PRODUCT_TYPE" | "INTEREST"; name: string };
 
 type FormColor = { key: string; id?: string; name: string; hex: string };
-type FormSize = { key: string; size: string; price: string };
+type FormSize = { key: string; size: string; price: string; cost: string };
 type FormImage = ProductDraft["images"][number] & { key: string };
 
 const COLOR_PRESETS = [
@@ -123,6 +123,7 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
   const [isActive, setIsActive] = useState(draft.isActive);
   const [price, setPrice] = useState(draft.id ? toDollars(draft.priceCents) : "");
   const [compareAt, setCompareAt] = useState(toDollars(draft.compareAtPriceCents));
+  const [cost, setCost] = useState(toDollars(draft.costCents));
   const [shortDescription, setShortDescription] = useState(draft.shortDescription);
   const [description, setDescription] = useState(draft.description);
   const [detailsText, setDetailsText] = useState(draft.detailsText);
@@ -133,7 +134,12 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
     draft.colors.map((color) => ({ ...color, key: newKey() })),
   );
   const [sizes, setSizes] = useState<FormSize[]>(() =>
-    draft.sizes.map((size) => ({ key: newKey(), size: size.size, price: toDollars(size.priceCents) })),
+    draft.sizes.map((size) => ({
+      key: newKey(),
+      size: size.size,
+      price: toDollars(size.priceCents),
+      cost: toDollars(size.costCents),
+    })),
   );
   const [images, setImages] = useState<FormImage[]>(() =>
     draft.images.map((image) => ({ ...image, key: newKey() })),
@@ -218,13 +224,21 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
     if (compareAt.trim() !== "" && compareAtCents === null) {
       return setError("Enter the compare-at price as a number, or leave it empty.");
     }
+    const costCents = cost.trim() === "" ? null : toCents(cost);
+    if (cost.trim() !== "" && costCents === null) {
+      return setError("Enter what it costs you as a number, like 11 or 11.50, or leave it empty.");
+    }
     const sizeRows: ProductDraft["sizes"] = [];
     for (const size of sizes) {
       const cents = size.price.trim() === "" ? null : toCents(size.price);
       if (size.price.trim() !== "" && cents === null) {
         return setError(`Enter the price for size ${size.size || "?"} as a number, or leave it empty.`);
       }
-      sizeRows.push({ size: size.size, priceCents: cents });
+      const sizeCost = size.cost.trim() === "" ? null : toCents(size.cost);
+      if (size.cost.trim() !== "" && sizeCost === null) {
+        return setError(`Enter the cost for size ${size.size || "?"} as a number, or leave it empty.`);
+      }
+      sizeRows.push({ size: size.size, priceCents: cents, costCents: sizeCost });
     }
 
     const payload: ProductDraft = {
@@ -234,6 +248,7 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
       isActive,
       priceCents,
       compareAtPriceCents: compareAtCents,
+      costCents,
       shortDescription,
       description,
       detailsText,
@@ -309,6 +324,15 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
                 mono
               />
             </div>
+            <TextField
+              label="What it costs you (USD)"
+              value={cost}
+              onChange={edit(setCost)}
+              inputMode="decimal"
+              placeholder="11.50"
+              hint="What the printer charges to make one, before their shipping. Customers never see it. The books and payouts use it to work out profit."
+              mono
+            />
             <TextField
               label="Web address"
               value={slug}
@@ -460,6 +484,17 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
                     placeholder="Same as product price"
                     className="input min-w-40 flex-1 font-mono"
                   />
+                  <input
+                    aria-label={`Cost for size ${size.size || "new size"}`}
+                    value={size.cost}
+                    onChange={(event) => {
+                      setSizes(sizes.map((item) => (item.key === size.key ? { ...item, cost: event.target.value } : item)));
+                      touch();
+                    }}
+                    inputMode="decimal"
+                    placeholder="Same cost"
+                    className="input w-32 font-mono"
+                  />
                   <button
                     type="button"
                     aria-label={`Remove size ${size.size || ""}`}
@@ -479,7 +514,7 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
                 <button
                   type="button"
                   onClick={() => {
-                    setSizes(SIZE_PRESET.map((size) => ({ key: newKey(), size, price: "" })));
+                    setSizes(SIZE_PRESET.map((size) => ({ key: newKey(), size, price: "", cost: "" })));
                     touch();
                   }}
                   className="chip"
@@ -490,7 +525,7 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
               <button
                 type="button"
                 onClick={() => {
-                  setSizes([...sizes, { key: newKey(), size: "", price: "" }]);
+                  setSizes([...sizes, { key: newKey(), size: "", price: "", cost: "" }]);
                   touch();
                 }}
                 className="chip"
@@ -500,7 +535,7 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
             </div>
             <p className={small}>
               Leave a price empty to charge the product price. Fill it in for sizes that cost
-              more, like 2XL.
+              more, like 2XL. The second box is what that size costs you, if it differs.
             </p>
           </section>
 

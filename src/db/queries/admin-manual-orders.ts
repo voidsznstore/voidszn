@@ -13,6 +13,7 @@ import {
   webhookEvents,
 } from "../schema";
 import { OrderError } from "./admin-orders";
+import { fillItemCosts } from "./item-costs";
 import { newOrderNumber, skuFor } from "./orders";
 
 /**
@@ -255,6 +256,7 @@ export async function createManualOrder(
       .returning({ id: orders.id });
 
     await tx.insert(orderItems).values(lines.map((line) => ({ orderId: order.id, ...line })));
+    await fillItemCosts(tx, { orderId: order.id });
 
     const note = input.note.trim();
     await tx.insert(orderEvents).values([
