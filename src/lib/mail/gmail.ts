@@ -67,10 +67,43 @@ function explain(error: unknown): MailError {
   return new MailError("Gmail could not be reached just now. Try again in a moment.");
 }
 
-/** Opens a connection, runs the work in one mailbox, and always closes the connection. */
-async function withMailbox<T>(box: Box, work: (client: ImapFlow, path: string) => Promise<T>): Promise<T> {
-  const config = readConfig();
-  if (!config) throw new MailError("The inbox isn't connected yet.");
+/**
+ * The open connection to Gmail, kept between requests. Signing in to Gmail takes
+ * a second or more each time, so pages opened one after another (the list, then a
+ * message, then back) share one connection instead of each making their own.
+ */
+type Held = {
+  client: ImapFlow;
+  settings: string;
+  lastUsed: number;
+  sentPath?: string;
+  closer?: ReturnType<typeof setTimeout>;
+};
+const globalForMail = globalThis as { voidsznMail?: Held };
+
+/** A connection left unused this long is closed, and not trusted if it is still around. */
+const KEEP_OPEN_MS = 60_000;
+
+/** Closes a connection without making anyone wait for Gmail's goodbye. */
+function drop(held: Held) {
+  if (held.closer) clearTimeout(held.closer);
+  if (globalForMail.voidsznMail === held) globalForMail.voidsznMail = undefined;
+  void held.client
+    .logout()
+    .catch(() => {})
+    .finally(() => held.client.close());
+}
+
+async function connect(config: Config): Promise<{ held: Held; reused: boolean }> {
+  const settings = `${config.user}|${config.pass}|${config.imap.host}:${config.imap.port}`;
+  const current = globalForMail.voidsznMail;
+  if (current) {
+    const fresh = Date.now() - current.lastUsed < KEEP_OPEN_MS;
+    if (current.settings === settings && current.client.usable && fresh) {
+      return { held: current, reused: true };
+    }
+    drop(current);
+  }
 
   const client = new ImapFlow({
     host: config.imap.host,
@@ -81,25 +114,68 @@ async function withMailbox<T>(box: Box, work: (client: ImapFlow, path: string) =
     // A page should fail quickly rather than hang if Gmail doesn't answer.
     connectionTimeout: 15_000,
     greetingTimeout: 10_000,
-    socketTimeout: 30_000,
+    socketTimeout: 20_000,
     disableAutoIdle: true,
+    // Each of these is an extra exchange with Gmail at sign-in that nothing here needs.
+    disableCompression: true,
+    disableAutoEnable: true,
   });
+  const held: Held = { client, settings, lastUsed: Date.now() };
   // Without a listener a dropped connection would crash the whole server process.
   client.on("error", () => {});
+  client.on("close", () => {
+    if (globalForMail.voidsznMail === held) globalForMail.voidsznMail = undefined;
+  });
+  await client.connect();
+  globalForMail.voidsznMail = held;
+  return { held, reused: false };
+}
 
-  try {
-    await client.connect();
-    const path = box === "inbox" ? "INBOX" : await sentPath(client);
-    const lock = await client.getMailboxLock(path);
+/** Starts the clock again on closing an idle connection. */
+function touch(held: Held) {
+  held.lastUsed = Date.now();
+  if (held.closer) clearTimeout(held.closer);
+  held.closer = setTimeout(() => drop(held), KEEP_OPEN_MS);
+  // Never keep the server process alive just to close a mail connection.
+  held.closer.unref?.();
+}
+
+/** Runs the work in one mailbox, on the shared connection or a new one. */
+async function withMailbox<T>(
+  box: Box,
+  work: (client: ImapFlow, path: string) => Promise<T>,
+  label = "request",
+): Promise<T> {
+  const config = readConfig();
+  if (!config) throw new MailError("The inbox isn't connected yet.");
+
+  for (let attempt = 1; ; attempt++) {
+    const started = Date.now();
+    let held: Held | undefined;
+    let reused = false;
     try {
-      return await work(client, path);
-    } finally {
-      lock.release();
+      ({ held, reused } = await connect(config));
+      const connected = Date.now();
+      const path = box === "inbox" ? "INBOX" : (held.sentPath ??= await sentPath(held.client));
+      const lock = await held.client.getMailboxLock(path);
+      const opened = Date.now();
+      try {
+        const result = await work(held.client, path);
+        // One line per visit to Gmail, to see where the time goes if it feels slow.
+        console.log(
+          `[inbox] ${label} (${box}): ${reused ? "reused connection" : `sign-in ${connected - started}ms`}, open ${opened - connected}ms, work ${Date.now() - opened}ms`,
+        );
+        return result;
+      } finally {
+        lock.release();
+        touch(held);
+      }
+    } catch (error) {
+      if (held) drop(held);
+      // A kept connection can have gone quiet. Try once more on a new one.
+      if (reused && attempt === 1 && !(error instanceof MailError)) continue;
+      throw explain(error);
     }
-  } catch (error) {
-    throw explain(error);
-  } finally {
-    await client.logout().catch(() => client.close());
   }
 }
 
@@ -187,7 +263,7 @@ export async function listMessages(
     range = `${Math.max(1, end - PAGE_SIZE + 1)}:${end}`;
     const rows = await client.fetchAll(range, fields);
     return { messages: rows.map(summary).sort(newestFirst), total, page, pages };
-  });
+  }, "list");
 }
 
 function toDate(value: Date | string | undefined): Date | null {
@@ -232,14 +308,17 @@ const people = (value: ParsedMail["to"]): Person[] =>
   (Array.isArray(value) ? value : value ? [value] : []).flatMap((group) => group.value.map(person));
 
 async function fetchParsed(client: ImapFlow, uid: number) {
-  const row = await client.fetchOne(String(uid), { uid: true, flags: true, size: true }, { uid: true });
-  if (!row) return null;
+  // One request for everything. The size limit stops a huge message being pulled in full.
+  const row = await client.fetchOne(
+    String(uid),
+    { uid: true, flags: true, size: true, source: { start: 0, maxLength: MAX_OPEN_BYTES } },
+    { uid: true },
+  );
+  if (!row || !row.source) return null;
   if ((row.size ?? 0) > MAX_OPEN_BYTES) {
     throw new MailError("This message is too large to open here. Open it in Gmail instead.");
   }
-  const full = await client.fetchOne(String(uid), { source: true }, { uid: true });
-  if (!full || !full.source) return null;
-  return { flags: row.flags ?? new Set<string>(), parsed: await simpleParser(full.source) };
+  return { flags: row.flags ?? new Set<string>(), parsed: await simpleParser(row.source) };
 }
 
 /** Files sent along with a message. Pictures placed inside the message itself are left out. */
@@ -278,7 +357,7 @@ export async function getMessage(box: Box, uid: number): Promise<MailMessage | n
         size: file.size,
       })),
     };
-  });
+  }, "open message");
 }
 
 /** The contents of one file attached to a message. */
@@ -292,13 +371,13 @@ export async function getAttachment(
     const file = found ? filesOf(found.parsed)[index] : undefined;
     if (!file) return null;
     return { name: file.filename || `attachment-${index + 1}`, content: file.content };
-  });
+  }, "attachment");
 }
 
 export async function markUnread(box: Box, uid: number): Promise<void> {
   await withMailbox(box, async (client) => {
     await client.messageFlagsRemove(String(uid), ["\\Seen"], { uid: true });
-  });
+  }, "mark unread");
 }
 
 export type Outgoing = {
@@ -347,9 +426,13 @@ export async function sendMail(mail: Outgoing): Promise<void> {
 
   // Shows the original as answered. Not worth failing the send over.
   if (original) {
-    await withMailbox(original.box, async (client) => {
-      await client.messageFlagsAdd(String(original.uid), ["\\Answered"], { uid: true });
-    }).catch(() => {});
+    await withMailbox(
+      original.box,
+      async (client) => {
+        await client.messageFlagsAdd(String(original.uid), ["\\Answered"], { uid: true });
+      },
+      "mark answered",
+    ).catch(() => {});
   }
 }
 
@@ -371,7 +454,7 @@ export async function checkInbox(): Promise<string> {
 
   let value: string;
   try {
-    await withMailbox("inbox", async () => {});
+    await withMailbox("inbox", async () => {}, "check");
     value = "ok";
   } catch (error) {
     value =
