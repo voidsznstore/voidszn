@@ -334,7 +334,11 @@ async function registerWebhook(environment: SquareEnvironment): Promise<Subscrip
         method: "POST",
         body: {
           // The same key every time, so two requests at once can't make two webhooks.
-          idempotency_key: createHash("sha256").update(`voidszn:${WEBHOOK_URL}`).digest("hex"),
+          // Square allows 45 characters here.
+          idempotency_key: createHash("sha256")
+            .update(`voidszn:${WEBHOOK_URL}`)
+            .digest("hex")
+            .slice(0, 32),
           subscription: {
             name: "VOIDSZN store",
             event_types: WEBHOOK_EVENTS,
