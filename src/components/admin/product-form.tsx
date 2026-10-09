@@ -270,11 +270,11 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
   const types = categories.filter((category) => category.kind === "PRODUCT_TYPE");
   const interests = categories.filter((category) => category.kind === "INTEREST");
   const uploading = upload !== null && upload.done < upload.total;
-  const fieldset = "flex flex-col gap-4 border border-line bg-ash-soft p-5";
+  const fieldset = "flex flex-col gap-4 panel p-5";
   const legend = "text-lg font-semibold text-white";
   const small = "text-[0.8125rem] text-smoke";
   const iconButton =
-    "h-11 w-11 flex-none border border-line-strong disabled:border-line disabled:text-line-strong";
+    "h-11 w-11 flex-none rounded-full border border-line-strong hover:bg-white/10 disabled:border-line disabled:text-line-strong";
 
   return (
     <form
@@ -414,7 +414,7 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
                   key={preset.name}
                   type="button"
                   onClick={() => replaceColors([...colors, { key: newKey(), ...preset }])}
-                  className="inline-flex min-h-11 items-center gap-2 border border-line-strong px-3 text-sm hover:border-bone"
+                  className="chip"
                 >
                   <span aria-hidden="true" className="h-4 w-4 rounded-full border border-line-strong" style={{ background: preset.hex }} />
                   Add {preset.name}
@@ -423,7 +423,7 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
               <button
                 type="button"
                 onClick={() => replaceColors([...colors, { key: newKey(), name: "", hex: "#808080" }])}
-                className="inline-flex min-h-11 items-center border border-line-strong px-3 text-sm hover:border-bone"
+                className="chip"
               >
                 Add another color
               </button>
@@ -482,7 +482,7 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
                     setSizes(SIZE_PRESET.map((size) => ({ key: newKey(), size, price: "" })));
                     touch();
                   }}
-                  className="inline-flex min-h-11 items-center border border-line-strong px-3 text-sm hover:border-bone"
+                  className="chip"
                 >
                   Add S to 2XL
                 </button>
@@ -493,7 +493,7 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
                   setSizes([...sizes, { key: newKey(), size: "", price: "" }]);
                   touch();
                 }}
-                className="inline-flex min-h-11 items-center border border-line-strong px-3 text-sm hover:border-bone"
+                className="chip"
               >
                 Add a size
               </button>
@@ -516,10 +516,10 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
             <ul className="grid grid-cols-2 gap-4 md:grid-cols-3">
               {images.map((image, index) => (
                 <li key={image.key} className="flex flex-col gap-2">
-                  <span className="relative block aspect-[4/5] overflow-hidden bg-well">
+                  <span className="relative block aspect-[4/5] well overflow-hidden !rounded-[0.5rem]">
                     <Image src={image.url} alt="" fill sizes="16rem" unoptimized className="object-cover" />
                     {index === 0 ? (
-                      <span className="label absolute left-2 top-2 bg-bone px-2 py-1 text-[0.6875rem] text-void">
+                      <span className="tag absolute left-2 top-2">
                         Main
                       </span>
                     ) : null}
@@ -587,11 +587,11 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
                 type="button"
                 disabled={!canUpload || uploading}
                 onClick={() => fileInput.current?.click()}
-                className="btn btn-outline min-h-11 px-5 disabled:opacity-50"
+                className="btn btn-glass min-h-11 px-5 disabled:opacity-50"
               >
                 {uploading ? `Uploading ${upload.done + 1} of ${upload.total}…` : "Add photos"}
               </button>
-              <p aria-live="polite" className="text-sm text-accent">
+              <p aria-live="polite" className="text-sm text-ember">
                 {upload?.error}
               </p>
             </div>
@@ -632,7 +632,7 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
               <Link
                 href={`/products/${draft.slug}`}
                 prefetch={false}
-                className="text-sm underline underline-offset-4"
+                className="text-sm link"
               >
                 View on the store
               </Link>
@@ -685,15 +685,15 @@ function ProductEditor({ draft, categories, canUpload, savedNotice }: ProductFor
       </div>
 
       {/* Save bar, always in reach */}
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-void/95 px-4 py-3 backdrop-blur md:left-56 sm:px-8">
+      <div className="glass glass-deep fixed inset-x-3 bottom-3 z-10 rounded-[1.75rem] px-4 py-2.5 sm:px-5 md:left-[16.5rem] md:right-6">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <button type="submit" disabled={pending || uploading} className="btn btn-accent disabled:opacity-60">
+          <button type="submit" disabled={pending || uploading} className="btn btn-accent">
             {pending ? "Saving…" : draft.id ? "Save changes" : "Save product"}
           </button>
-          <Link href="/admin/products" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">
+          <Link href="/admin/products" className="inline-flex min-h-11 items-center text-sm link">
             Back to products
           </Link>
-          <p role="alert" aria-live="assertive" className={`min-w-0 flex-1 text-sm ${error ? "text-accent" : "text-smoke"}`}>
+          <p role="alert" aria-live="assertive" className={`min-w-0 flex-1 text-sm ${error ? "text-ember" : "text-smoke"}`}>
             {error ?? (dirty ? "Unsaved changes." : savedNotice ? "Saved." : "")}
           </p>
         </div>

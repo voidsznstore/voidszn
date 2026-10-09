@@ -32,7 +32,7 @@ function SalesTable({ title, help, rows }: { title: string; help: string; rows: 
         <p className="text-sm text-smoke">{help}</p>
       </div>
       {rows.length === 0 ? (
-        <p className="border border-line bg-ash-soft px-5 py-8 text-center text-bone-dim">
+        <p className="panel px-5 py-8 text-center text-bone-dim">
           Nothing sold in this period.
         </p>
       ) : (
@@ -83,9 +83,7 @@ async function Sales({ searchParams }: Pick<Props, "searchParams">) {
             key={period}
             href={`/admin/sales?days=${period}`}
             aria-current={period === days ? "page" : undefined}
-            className={`inline-flex min-h-11 items-center border px-4 text-sm font-semibold ${
-              period === days ? "border-bone bg-bone text-void" : "border-line-strong hover:border-bone"
-            }`}
+            className="chip"
           >
             Last {period === 365 ? "12 months" : `${period} days`}
           </Link>
@@ -98,9 +96,9 @@ async function Sales({ searchParams }: Pick<Props, "searchParams">) {
           ["Items sold", String(total.units)],
           ["Orders", String(total.orders)],
         ].map(([label, value]) => (
-          <li key={label} className="flex flex-col gap-2 border border-line bg-ash-soft p-5">
-            <span className="label text-xs text-smoke">{label}</span>
-            <span className="font-mono text-3xl text-white">{value}</span>
+          <li key={label} className="flex flex-col gap-2 panel p-5">
+            <span className="label text-smoke">{label}</span>
+            <span className="num text-3xl font-semibold text-white">{value}</span>
           </li>
         ))}
       </ul>

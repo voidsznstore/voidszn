@@ -79,11 +79,7 @@ async function Orders({ searchParams }: Pick<Props, "searchParams">) {
             key={key}
             href={tabHref(key)}
             aria-current={key === currentView ? "page" : undefined}
-            className={`inline-flex min-h-11 items-center gap-2 border px-4 text-sm font-semibold ${
-              key === currentView
-                ? "border-bone bg-bone text-void"
-                : "border-line-strong hover:border-bone"
-            }`}
+            className="chip"
           >
             {ORDER_VIEWS[key]}
             <span className="font-mono text-xs">{counts[key]}</span>
@@ -94,7 +90,7 @@ async function Orders({ searchParams }: Pick<Props, "searchParams">) {
       <form key={[currentView, q, category, sort].join("|")} className="flex flex-wrap items-end gap-3">
         {currentView !== "all" ? <input type="hidden" name="view" value={currentView} /> : null}
         <div className="flex min-w-48 flex-1 flex-col gap-1.5">
-          <label htmlFor="filter-q" className="label text-xs text-smoke">
+          <label htmlFor="filter-q" className="label text-smoke">
             Search
           </label>
           <input
@@ -107,7 +103,7 @@ async function Orders({ searchParams }: Pick<Props, "searchParams">) {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="filter-category" className="label text-xs text-smoke">
+          <label htmlFor="filter-category" className="label text-smoke">
             Contains a product from
           </label>
           <select id="filter-category" name="category" defaultValue={category ?? ""} className="input w-auto min-w-40">
@@ -133,7 +129,7 @@ async function Orders({ searchParams }: Pick<Props, "searchParams">) {
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="filter-sort" className="label text-xs text-smoke">
+          <label htmlFor="filter-sort" className="label text-smoke">
             Sort by
           </label>
           <select id="filter-sort" name="sort" defaultValue={sort} className="input w-auto min-w-40">
@@ -144,13 +140,13 @@ async function Orders({ searchParams }: Pick<Props, "searchParams">) {
             ))}
           </select>
         </div>
-        <button type="submit" className="btn btn-outline min-h-[2.875rem] px-5">
+        <button type="submit" className="btn btn-glass min-h-[2.875rem] px-5">
           Apply
         </button>
         {isFiltered ? (
           <Link
             href={currentView === "all" ? "/admin/orders" : `/admin/orders?view=${currentView}`}
-            className="inline-flex min-h-[2.875rem] items-center text-sm underline underline-offset-4"
+            className="inline-flex min-h-[2.875rem] items-center text-sm link"
           >
             Clear
           </Link>
@@ -158,11 +154,11 @@ async function Orders({ searchParams }: Pick<Props, "searchParams">) {
       </form>
 
       {orders.length === 0 ? (
-        <p className="border border-line bg-ash-soft px-5 py-10 text-center text-bone-dim">
+        <p className="panel px-5 py-10 text-center text-bone-dim">
           {isFiltered || currentView !== "all" ? "No orders match." : "No orders yet."}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="panel overflow-x-auto px-5 py-1">
           <table className="w-full min-w-[46rem] border-collapse text-left text-sm">
             <thead>
               <tr className="label border-b border-line text-xs text-smoke">
@@ -176,7 +172,7 @@ async function Orders({ searchParams }: Pick<Props, "searchParams">) {
             </thead>
             <tbody>
               {orders.map((order) => (
-                <tr key={order.orderNumber} className="border-b border-line hover:bg-ash-soft">
+                <tr key={order.orderNumber} className="border-b border-line hover:bg-white/[0.04]">
                   <td className="py-2 pr-4">
                     <Link
                       href={`/admin/orders/${order.orderNumber}`}
@@ -193,9 +189,9 @@ async function Orders({ searchParams }: Pick<Props, "searchParams">) {
                   <td className="py-2 pr-4 font-mono">{order.units}</td>
                   <td className="py-2 pr-4 font-mono">{formatMoney(order.totalCents)}</td>
                   <td className="py-2">
-                    <span className="label text-xs">{statusLabel(order.status)}</span>
+                    <span className="label">{statusLabel(order.status)}</span>
                     {order.flagged ? (
-                      <span className="label ml-2 bg-accent px-2 py-1 text-[0.6875rem] text-on-accent">
+                      <span className="tag tag-accent ml-2">
                         Needs attention
                       </span>
                     ) : null}

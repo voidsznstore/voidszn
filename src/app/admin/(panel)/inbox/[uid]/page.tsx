@@ -23,7 +23,7 @@ export default function MessagePage({ params, searchParams }: Props) {
   );
 }
 
-const panel = "flex flex-col gap-4 border border-line bg-ash-soft p-5";
+const panel = "flex flex-col gap-4 panel p-5";
 const small = "text-[0.8125rem] text-smoke";
 const show = (person: Person) => (person.name ? `${person.name} <${person.address}>` : person.address);
 
@@ -60,10 +60,10 @@ async function Message({ params, searchParams }: Props) {
     if (!(error instanceof MailError)) throw error;
     return (
       <div className="flex flex-col gap-4">
-        <Link href={back} className="text-sm text-smoke underline underline-offset-4 hover:text-bone">
+        <Link href={back} className="text-sm text-smoke link">
           Back
         </Link>
-        <p className="border border-accent p-5 text-bone-dim">{error.message}</p>
+        <p className="notice p-5 text-bone-dim">{error.message}</p>
       </div>
     );
   }
@@ -80,7 +80,7 @@ async function Message({ params, searchParams }: Props) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
-        <Link href={back} className="text-sm text-smoke underline underline-offset-4 hover:text-bone">
+        <Link href={back} className="text-sm text-smoke link">
           {box === "sent" ? "Sent" : "Inbox"}
         </Link>
         <h1 className="text-2xl font-semibold text-white">{message.subject}</h1>
@@ -108,7 +108,7 @@ async function Message({ params, searchParams }: Props) {
         </dl>
         <div className="flex flex-wrap items-center gap-x-6">
           {customer ? (
-            <Link href={`/admin/customers/${customer.id}`} className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">
+            <Link href={`/admin/customers/${customer.id}`} className="inline-flex min-h-11 items-center text-sm link">
               This is a customer: see their orders
             </Link>
           ) : null}
@@ -133,7 +133,7 @@ async function Message({ params, searchParams }: Props) {
                 <>
                   Pictures from the internet are blocked, which is how senders usually see that
                   an email was opened.{" "}
-                  <Link href={`${self}pictures=1`} className="underline underline-offset-4">
+                  <Link href={`${self}pictures=1`} className="link">
                     Show pictures
                   </Link>
                 </>
@@ -153,7 +153,7 @@ async function Message({ params, searchParams }: Props) {
                   <a
                     href={`/api/admin/inbox/attachment?box=${box}&uid=${uid}&index=${file.index}`}
                     download={file.name}
-                    className="inline-flex min-h-11 items-center gap-2 underline underline-offset-4"
+                    className="inline-flex min-h-11 items-center gap-2 link"
                   >
                     {file.name}
                     <span className="text-sm text-smoke no-underline">{size(file.size)}</span>

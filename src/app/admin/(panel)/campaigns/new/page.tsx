@@ -1,22 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { NewCampaignEditor } from "@/components/admin/campaign-editor";
+import { BLANK_CAMPAIGN, NewCampaignEditor } from "@/components/admin/campaign-editor";
 import { Loading, PageHeader } from "@/components/admin/page-header";
 import { getDb } from "@/db";
 import { listMarketingRecipients } from "@/db/queries/admin-customers";
+import { listUsableDiscounts } from "@/db/queries/admin-discounts";
+import { toCampaignCode } from "@/lib/admin/campaign-codes";
 import { campaignBlocker } from "@/lib/admin/campaign-setup";
 import { requireAdmin } from "@/lib/admin/session";
 import { isStorageConfigured } from "@/lib/storage";
 
 export const metadata: Metadata = { title: "New campaign" };
 
-const BLANK = { subject: "", preheader: "", body: "", imageUrl: null, buttonLabel: "", buttonUrl: "" };
-
 export default function NewCampaignPage() {
   return (
     <>
-      <Link href="/admin/campaigns" className="text-sm text-smoke underline underline-offset-4 hover:text-bone">
+      <Link href="/admin/campaigns" className="link text-sm text-smoke">
         All campaigns
       </Link>
       <PageHeader title="New campaign" />
@@ -29,10 +29,12 @@ export default function NewCampaignPage() {
 
 async function NewCampaign() {
   const admin = await requireAdmin();
-  const recipients = await listMarketingRecipients(getDb());
+  const db = getDb();
+  const [recipients, codes] = await Promise.all([listMarketingRecipients(db), listUsableDiscounts(db)]);
   return (
     <NewCampaignEditor
-      content={BLANK}
+      content={BLANK_CAMPAIGN}
+      codes={codes.map(toCampaignCode)}
       audience={recipients.length}
       testAddress={admin.email}
       canUpload={isStorageConfigured()}

@@ -15,7 +15,7 @@ const labelClass = "text-sm font-semibold";
 
 function Status({ state }: { state: MailFormState }) {
   return (
-    <p role="alert" aria-live="polite" className={`text-sm ${state.error ? "text-accent" : "text-smoke"}`}>
+    <p role="alert" aria-live="polite" className={`text-sm ${state.error ? "text-ember" : "text-smoke"}`}>
       {state.error ?? state.done ?? ""}
     </p>
   );
@@ -80,7 +80,7 @@ export function ReplyForm({
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-4">
-        <button type="submit" disabled={pending} className="btn btn-accent disabled:opacity-60">
+        <button type="submit" disabled={pending} className="btn btn-accent">
           {pending ? "Sending…" : "Send reply"}
         </button>
         <Status state={state} />
@@ -133,7 +133,7 @@ function Compose({ to, subject, from }: ComposeProps) {
       </div>
       <p className="text-[0.8125rem] text-smoke">Goes out from {from}.</p>
       <div className="flex flex-wrap items-center gap-4">
-        <button type="submit" disabled={pending} className="btn btn-accent disabled:opacity-60">
+        <button type="submit" disabled={pending} className="btn btn-accent">
           {pending ? "Sending…" : "Send"}
         </button>
         <Status state={state} />
@@ -151,7 +151,7 @@ export function MarkUnreadForm({ box, uid }: { box: string; uid: number }) {
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex min-h-11 items-center text-sm underline underline-offset-4 disabled:opacity-60"
+        className="inline-flex min-h-11 items-center text-sm link"
       >
         {pending ? "Marking…" : "Mark as unread"}
       </button>

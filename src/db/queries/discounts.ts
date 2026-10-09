@@ -1,8 +1,39 @@
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { Database } from "../index";
-import { discountCodes } from "../schema";
+import { discountCodes, discountRedemptions } from "../schema";
 
 type Executor = Pick<Database, "update">;
+
+export type DiscountCode = typeof discountCodes.$inferSelect;
+
+/** A code as typed, whatever its case. Null when there is no such code. */
+export async function findDiscountByCode(db: Database, code: string): Promise<DiscountCode | null> {
+  const [row] = await db
+    .select()
+    .from(discountCodes)
+    .where(eq(discountCodes.code, code.trim().toUpperCase()))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function findDiscountById(db: Database, id: string): Promise<DiscountCode | null> {
+  const [row] = await db.select().from(discountCodes).where(eq(discountCodes.id, id)).limit(1);
+  return row ?? null;
+}
+
+/** How many paid orders from this address have used the code. */
+export async function countRedemptions(db: Database, discountCodeId: string, email: string): Promise<number> {
+  const [row] = await db
+    .select({ value: sql<number>`count(*)::int` })
+    .from(discountRedemptions)
+    .where(
+      and(
+        eq(discountRedemptions.discountCodeId, discountCodeId),
+        eq(discountRedemptions.email, email.trim().toLowerCase()),
+      ),
+    );
+  return row?.value ?? 0;
+}
 
 /**
  * Claims one use of a discount code.

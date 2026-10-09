@@ -250,6 +250,17 @@ export async function updateCustomer(
   try {
     return await db.transaction(async (tx) => {
       const consent = await settleConsent(tx, values.email, values.acceptsEmail, knewOptOut);
+      // Taking someone off the list by hand is an unsubscribe like any other, so
+      // every kind of marketing email, cart reminders included, stops for them.
+      const [before] = await tx
+        .select({ email: customers.email, acceptsEmail: customers.acceptsEmail })
+        .from(customers)
+        .where(eq(customers.id, id))
+        .limit(1)
+        .for("update");
+      if (before?.acceptsEmail && !values.acceptsEmail) {
+        await tx.insert(emailOptouts).values({ email: before.email, source: "admin" }).onConflictDoNothing();
+      }
       const [row] = await tx
         .update(customers)
         .set({ ...values, acceptsEmail: consent.acceptsEmail, updatedAt: new Date() })

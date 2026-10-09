@@ -38,7 +38,7 @@ export default function ProductPage({ params }: Props) {
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto w-full max-w-site flex-1 px-4 pb-20 sm:px-10">
+      <main className="mx-auto w-full max-w-site flex-1 px-4 pb-24 pt-2 sm:px-10">
         {/* Products added after the last deploy load here on their first visit. */}
         <Suspense fallback={<div className="min-h-[70vh]" aria-busy="true" />}>
           <Product params={params} />
@@ -60,7 +60,7 @@ async function Product({ params }: Pick<Props, "params">) {
     <>
       <nav
         aria-label="Breadcrumb"
-        className="label flex min-h-14 flex-wrap items-center gap-2 text-xs text-smoke"
+        className="flex min-h-14 flex-wrap items-center gap-2 text-sm text-smoke"
       >
         <Link href="/" className="inline-flex min-h-11 items-center hover:text-bone">
           Home
@@ -73,15 +73,19 @@ async function Product({ params }: Pick<Props, "params">) {
           {product.typeName ?? "Shop All"}
         </Link>
         <span aria-hidden="true">/</span>
-        <span className="text-bone">{product.name}</span>
+        <span aria-current="page" className="text-bone">
+          {product.name}
+        </span>
       </nav>
 
       <ProductView product={product} typeName={product.typeName ?? "Shop"} />
 
       {related.length > 0 ? (
-        <section className="pt-20">
-          <h2 className="display mb-7 text-5xl text-white">You may also like</h2>
-          <div className="grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-3">
+        <section className="pt-24">
+          <h2 className="display mb-8 text-center text-[clamp(2rem,5vw,2.75rem)] text-white">
+            You may also like
+          </h2>
+          <div className="mx-auto grid max-w-5xl grid-cols-2 gap-x-4 gap-y-9 sm:gap-x-6 lg:grid-cols-3">
             {related.map((item) => (
               <ProductCard key={item.slug} product={item} />
             ))}

@@ -145,3 +145,75 @@ export function useCart() {
     count: stored.reduce((total, line) => total + line.quantity, 0),
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Discount code                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A discount code waiting to be used: typed at checkout, or picked up from a link
+ * in an email. Only the code is kept. What it is worth is worked out on the server.
+ */
+const CODE_KEY = "voidszn-code-v1";
+let code: string | null = null;
+let codeLoaded = false;
+const codeListeners = new Set<() => void>();
+
+const tidyCode = (raw: string) => raw.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 30);
+
+function readCode(): string | null {
+  try {
+    const raw = window.localStorage.getItem(CODE_KEY);
+    return raw ? tidyCode(raw) || null : null;
+  } catch {
+    return null;
+  }
+}
+
+function handleCodeStorage(event: StorageEvent) {
+  if (event.key !== CODE_KEY) return;
+  code = readCode();
+  codeListeners.forEach((listener) => listener());
+}
+
+function subscribeCode(listener: () => void) {
+  if (!codeLoaded) {
+    code = readCode();
+    codeLoaded = true;
+  }
+  codeListeners.add(listener);
+  if (codeListeners.size === 1) window.addEventListener("storage", handleCodeStorage);
+  return () => {
+    codeListeners.delete(listener);
+    if (codeListeners.size === 0) window.removeEventListener("storage", handleCodeStorage);
+  };
+}
+
+/** Saves a code to use at checkout, or clears it with null. */
+export function setDiscountCode(next: string | null) {
+  code = next ? tidyCode(next) || null : null;
+  codeLoaded = true;
+  try {
+    if (code) window.localStorage.setItem(CODE_KEY, code);
+    else window.localStorage.removeItem(CODE_KEY);
+  } catch {
+    // Still applies for this visit.
+  }
+  codeListeners.forEach((listener) => listener());
+}
+
+/** Replaces the whole cart, e.g. when someone comes back through a reminder email. */
+export function replaceCart(next: CartLine[]) {
+  commit(
+    next.filter(isLine).map((line) => ({ ...line, quantity: clamp(line.quantity) })),
+  );
+  loaded = true;
+}
+
+export function useDiscountCode(): string | null {
+  return useSyncExternalStore(
+    subscribeCode,
+    () => code,
+    () => null,
+  );
+}

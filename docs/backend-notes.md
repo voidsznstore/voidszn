@@ -114,8 +114,70 @@ sales), just in ordered by `products.created_at`.
   clears the catalog cache (`CATALOG_TAG`). Prices at checkout are read from the
   database every time.
 
-Not built yet: staff accounts, discount codes, the "delayed order" email, the
-fulfilment connection to the printer.
+- **Discounts** (`/admin/discounts`, `src/db/queries/admin-discounts.ts`): codes that
+  take a percentage off, an amount off, or make shipping free. Each can have a minimum
+  order, a limit on total uses, "one use per customer", a start and an end (typed in
+  the store's time zone, `siteConfig.timeZone`), an on/off switch and a private note.
+  The list filters by status and type and sorts by newest, code, most used, biggest
+  and ending soonest. A code's page shows how often it was used, what it took off and
+  the orders that used it. Deleting a code leaves those orders with its name.
+  What a code is worth is only ever worked out on the server
+  (`src/lib/checkout/discounts.ts`). One code per order. A percentage or amount comes
+  off the items, never the shipping, and never more than the items cost.
+  `?code=SAVE20` on any store address saves that code for checkout
+  (`src/components/cart/code-link.tsx`), which is how emails apply a code in one tap.
+  "One use per customer" is checked against the email given at checkout. Someone who
+  changes their email on the payment page gets through. Limits, end dates and the
+  on/off switch are checked when the payment page is opened, and Square's payment
+  pages don't expire, so someone who opened one while a code still worked can pay
+  with it later. Either way the order is saved (they have paid) and **flagged for
+  attention** with what happened, so it is seen before it ships.
+  The use is counted in a savepoint of its own inside the order's transaction: a
+  paid order is saved even if the code has been deleted in the meantime.
+- **The marketing box at checkout** ("Email me new designs and offers") is recorded
+  on the Square order and only acted on once the order is paid, which is what shows
+  the address belongs to the person who typed it. It never lifts an unsubscribe.
+  Unticking "Agreed to get marketing emails" on a customer in the admin counts as an
+  unsubscribe too (`email_optouts`, source `admin`), so it stops cart reminders as
+  well as campaigns.
+- **The "delivered" email with a thank-you code** is partly an offer, so the code is
+  left out for anyone who has unsubscribed or has already used it, and the email
+  carries an unsubscribe link (the order's own id is the token).
+- **Automatic emails** (`/admin/campaigns/automatic`, settings saved in
+  `store_settings` under `emails.automation`, read through `src/lib/email/automation.ts`):
+  cart reminders on or off, how long each of the three waits, a code for each, and a
+  thank-you code for the "delivered" email. Every automatic email has a preview page
+  with a "send a test to me" button (`src/lib/email/samples.ts`).
+- **Cart reminders** (`src/lib/email/cart-reminders.ts`, `src/db/queries/carts.ts`):
+  when a customer gives their email at checkout and goes to pay, the cart is saved in
+  `abandoned_carts`. If no order follows, up to three reminders go out (defaults: 1,
+  24 and 72 hours after they left; `left_at` is the clock). A cart is closed when its
+  owner orders, unsubscribes, or a week passes. Starting checkout again moves the
+  clock but never restarts the series, and an address gets at most one series of
+  three a month however many carts are started with it, so the checkout form can't
+  be used to pester someone. A cart is marked as reminded before the email is sent,
+  so a failed send misses one reminder rather than risking two. A reminder only
+  offers its code to someone who can use it: the cart meets the minimum and they
+  haven't already had their one use. The button in the email
+  (`/cart/[token]`) refills the cart on whatever device opens it and goes to checkout.
+  Reminders are marketing email: they carry the mailing address and an unsubscribe
+  link, go out from `siteConfig.newsEmail`, and don't send until the mailing address
+  is filled in. `vercel.json` calls `/api/cron/cart-reminders` every 30 minutes. The
+  address does nothing but send what is already due, so it is safe if called by
+  anyone; set `CRON_SECRET` in Vercel to lock it to Vercel's own timer anyway.
+- **Campaign templates and codes:** the campaign editor starts from ready-made
+  templates (`src/lib/email/presets.ts`) and can show a discount code. The email then
+  has the code in a box and its button carries `?code=`. A campaign with a part still
+  in [BRACKETS], or with a code that can no longer be used, can't be sent.
+- **What the emails look like** (`src/lib/email/templates.ts`): dark, like the store,
+  with the logo (`public/email/logo.png`) and Anton for headlines where the mail app
+  loads fonts (`public/email/anton.woff2`). Built with tables and inline styles. One
+  column, the button near the top and at least 56px tall. The mailing address is the
+  last line of every email, small and quiet on purpose; it must stay in every
+  marketing email.
+
+Not built yet: staff accounts, the "delayed order" email, the fulfilment connection
+to the printer, a newsletter sign-up form on the store.
 
 ## Forms that need the backend
 
@@ -136,10 +198,18 @@ promises one thing on a policy page and another in an email.
 
 Payments run on Square. All Square code is in `src/lib/payments/`.
 
-- The browser sends only product, color, size and quantity to `/api/checkout`. Prices
-  and shipping are worked out on the server (`src/lib/checkout/pricing.ts`).
+- The checkout page (`/checkout`) shows the order, takes a discount code and asks for
+  an email, then hands over to Square. It gets its numbers from
+  `/api/checkout/quote`, which saves nothing.
+- The browser sends only product, color, size and quantity, the code as typed and the
+  email to `/api/checkout`. Prices, the discount and shipping are worked out on the
+  server (`src/lib/checkout/pricing.ts`, `src/lib/checkout/discounts.ts`). A code that
+  can't be used stops checkout with the reason, so nobody pays full price by surprise.
 - The server creates a Square order and sends the customer to Square's hosted payment
-  page for it. No card data touches this site.
+  page for it, with the email filled in. The discount goes to Square as an order
+  discount and the code's name rides along in the order's `metadata`, which is how
+  the saved order knows which code was used. A free shipping code leaves the shipping
+  fee off. No card data touches this site.
 - An order is saved when Square confirms the payment. Two things trigger that, and
   whichever comes second changes nothing: Square's webhook (`/api/webhooks/square`)
   and the customer landing on the confirmation page.

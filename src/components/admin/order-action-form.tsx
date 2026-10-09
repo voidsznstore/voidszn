@@ -41,11 +41,11 @@ export function OrderActionForm({
         <button
           type="submit"
           disabled={pending}
-          className={`btn min-h-11 px-5 disabled:opacity-60 ${tone === "accent" ? "btn-accent" : "btn-outline"}`}
+          className={`btn min-h-11 px-5 ${tone === "accent" ? "btn-accent" : "btn-glass"}`}
         >
           {pending ? pendingLabel : submitLabel}
         </button>
-        <p aria-live="polite" className={`text-sm ${state.error ? "text-accent" : "text-smoke"}`}>
+        <p aria-live="polite" className={`text-sm ${state.error ? "text-ember" : "text-smoke"}`}>
           {state.error ?? (pending ? "" : state.done)}
         </p>
       </div>

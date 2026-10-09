@@ -41,7 +41,7 @@ export default function ContactPage() {
       <p>
         {legalName}
         <br />
-        {mailingAddress}
+        <span className="fine-print">{mailingAddress}</span>
       </p>
     </InfoPage>
   );

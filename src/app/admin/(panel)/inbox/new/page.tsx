@@ -14,7 +14,7 @@ type Props = PageProps<"/admin/inbox/new">;
 export default function NewMailPage({ searchParams }: Props) {
   return (
     <>
-      <Link href="/admin/inbox" className="text-sm text-smoke underline underline-offset-4 hover:text-bone">
+      <Link href="/admin/inbox" className="text-sm text-smoke link">
         Inbox
       </Link>
       <PageHeader title="Write an email" />

@@ -4,10 +4,14 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { CampaignEditor } from "@/components/admin/campaign-editor";
 import { ContinueCampaignForm } from "@/components/admin/continue-campaign-form";
+import { EmailPreview } from "@/components/admin/email-preview";
 import { Loading } from "@/components/admin/page-header";
 import { getDb } from "@/db";
 import { getCampaign } from "@/db/queries/admin-campaigns";
 import { listMarketingRecipients } from "@/db/queries/admin-customers";
+import { listUsableDiscounts } from "@/db/queries/admin-discounts";
+import { toCampaignCode } from "@/lib/admin/campaign-codes";
+import { contentOf } from "@/lib/email/campaigns";
 import { campaignBlocker } from "@/lib/admin/campaign-setup";
 import { formatDateTime } from "@/lib/admin/format";
 import { requireAdmin } from "@/lib/admin/session";
@@ -21,7 +25,7 @@ type Props = PageProps<"/admin/campaigns/[id]">;
 export default function CampaignPage({ params }: Props) {
   return (
     <>
-      <Link href="/admin/campaigns" className="text-sm text-smoke underline underline-offset-4 hover:text-bone">
+      <Link href="/admin/campaigns" className="link text-sm text-smoke">
         All campaigns
       </Link>
       <Suspense fallback={<Loading />}>
@@ -32,7 +36,7 @@ export default function CampaignPage({ params }: Props) {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const panel = "flex flex-col gap-4 border border-line bg-ash-soft p-5";
+const panel = "flex flex-col gap-4 panel p-5";
 const heading = "text-lg font-semibold text-white";
 
 async function Campaign({ params }: Pick<Props, "params">) {
@@ -43,24 +47,26 @@ async function Campaign({ params }: Pick<Props, "params">) {
   if (!detail) notFound();
 
   const { campaign, sends, problems } = detail;
-  const content = {
-    subject: campaign.subject,
-    preheader: campaign.preheader ?? "",
-    body: campaign.body,
-    imageUrl: campaign.imageUrl,
-    buttonLabel: campaign.buttonLabel ?? "",
-    buttonUrl: campaign.buttonUrl ?? "",
-  };
 
   if (campaign.status === "DRAFT") {
-    const recipients = await listMarketingRecipients(db);
+    const [recipients, codes] = await Promise.all([listMarketingRecipients(db), listUsableDiscounts(db)]);
     return (
       <>
         <h1 className="display mb-8 mt-2 text-4xl text-white">Draft campaign</h1>
         <CampaignEditor
           key={campaign.id}
           id={campaign.id}
-          content={content}
+          codes={codes.map(toCampaignCode)}
+          content={{
+            subject: campaign.subject,
+            preheader: campaign.preheader ?? "",
+            heading: campaign.heading ?? "",
+            body: campaign.body,
+            imageUrl: campaign.imageUrl,
+            buttonLabel: campaign.buttonLabel ?? "",
+            buttonUrl: campaign.buttonUrl ?? "",
+            discountCodeId: campaign.discountCodeId,
+          }}
           audience={recipients.length}
           testAddress={admin.email}
           canUpload={isStorageConfigured()}
@@ -69,6 +75,8 @@ async function Campaign({ params }: Pick<Props, "params">) {
       </>
     );
   }
+
+  const sent = await contentOf(campaign, "sent");
 
   return (
     <div className="flex flex-col gap-6">
@@ -90,9 +98,9 @@ async function Campaign({ params }: Pick<Props, "params">) {
               ["Still to send", sends.pending],
               ["Not sent", sends.failed + sends.skipped],
             ].map(([label, value]) => (
-              <li key={label} className="flex flex-col gap-1 border border-line bg-ash-soft p-4">
-                <span className="label text-xs text-smoke">{label}</span>
-                <span className="font-mono text-xl text-white">{value}</span>
+              <li key={label} className="flex flex-col gap-1 panel p-4">
+                <span className="label text-smoke">{label}</span>
+                <span className="num text-2xl font-semibold text-white">{value}</span>
               </li>
             ))}
           </ul>
@@ -124,12 +132,7 @@ async function Campaign({ params }: Pick<Props, "params">) {
 
         <section className={panel}>
           <h2 className={heading}>What was sent</h2>
-          <iframe
-            title="The email that was sent"
-            sandbox=""
-            srcDoc={campaignEmail(content, "#").html}
-            className="h-[44rem] w-full border border-line bg-white"
-          />
+          <EmailPreview html={campaignEmail(sent, "#").html} title="The email that was sent" />
         </section>
       </div>
     </div>

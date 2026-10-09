@@ -23,7 +23,7 @@ const BLANK = {
 export default function NewCustomerPage() {
   return (
     <>
-      <Link href="/admin/customers" className="text-sm text-smoke underline underline-offset-4 hover:text-bone">
+      <Link href="/admin/customers" className="text-sm text-smoke link">
         All customers
       </Link>
       <PageHeader title="Add customer" />
@@ -37,7 +37,7 @@ export default function NewCustomerPage() {
 async function NewCustomer() {
   await requireAdmin();
   return (
-    <section className="flex max-w-xl flex-col gap-4 border border-line bg-ash-soft p-5">
+    <section className="flex max-w-xl flex-col gap-4 panel p-5">
       <NewCustomerForm customer={BLANK} />
     </section>
   );

@@ -22,7 +22,7 @@ export default function SecurityPage({ searchParams }: Props) {
   );
 }
 
-const panel = "flex flex-col gap-4 border border-line bg-ash-soft p-5";
+const panel = "flex flex-col gap-4 panel p-5";
 
 async function Security({ searchParams }: Pick<Props, "searchParams">) {
   const admin = await requireAdmin();
@@ -31,7 +31,7 @@ async function Security({ searchParams }: Pick<Props, "searchParams">) {
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       {recovery ? (
-        <p className="border border-accent px-4 py-3 text-sm">
+        <p className="notice px-4 py-3 text-sm">
           You signed in with a recovery code. That code is now used up. If your phone is gone
           for good, set up the authenticator app on your new one below.
         </p>
@@ -48,7 +48,7 @@ async function Security({ searchParams }: Pick<Props, "searchParams">) {
       <section className={panel}>
         <h2 className="text-lg font-semibold text-white">Password</h2>
         <details>
-          <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm underline underline-offset-4">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm link">
             Change your password
           </summary>
           <div className="pt-2">
@@ -65,7 +65,7 @@ async function Security({ searchParams }: Pick<Props, "searchParams">) {
             : `You have ${codesLeft} unused recovery ${codesLeft === 1 ? "code" : "codes"}. Each gets you in once if you don't have your phone.`}
         </p>
         <details open={codesLeft <= 2}>
-          <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm underline underline-offset-4">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm link">
             Make a new set of codes
           </summary>
           <div className="flex flex-col gap-3 pt-2">
@@ -83,7 +83,7 @@ async function Security({ searchParams }: Pick<Props, "searchParams">) {
           admin is signed out.
         </p>
         <details>
-          <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm underline underline-offset-4">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm link">
             Set up a different app or phone
           </summary>
           <div className="pt-2">

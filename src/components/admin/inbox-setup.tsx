@@ -3,7 +3,7 @@ import { siteConfig } from "@/lib/site-config";
 /** Shown in place of the inbox until it has been connected to Gmail. */
 export function InboxSetup() {
   return (
-    <section className="flex max-w-2xl flex-col gap-4 border border-line bg-ash-soft p-5">
+    <section className="flex max-w-2xl flex-col gap-4 panel p-5">
       <h2 className="text-lg font-semibold text-white">Connect your Gmail</h2>
       <p className="text-bone-dim">
         The inbox reads and sends as {siteConfig.inboxEmail}. It connects with an app password: a
@@ -17,7 +17,7 @@ export function InboxSetup() {
             href="https://myaccount.google.com/apppasswords"
             target="_blank"
             rel="noreferrer"
-            className="underline underline-offset-4"
+            className="link"
           >
             myaccount.google.com/apppasswords
           </a>

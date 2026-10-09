@@ -57,6 +57,13 @@
       "when": 1791525108296,
       "tag": "0007_campaign_send_claims",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791534957927,
+      "tag": "0008_discounts_and_cart_emails",
+      "breakpoints": true
     }
   ]
 }

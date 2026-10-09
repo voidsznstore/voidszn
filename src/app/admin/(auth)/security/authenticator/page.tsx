@@ -46,7 +46,7 @@ async function Enrol() {
       />
 
       <details className="text-sm text-bone-dim">
-        <summary className="inline-flex min-h-11 cursor-pointer items-center underline underline-offset-4">
+        <summary className="inline-flex min-h-11 cursor-pointer items-center link">
           Can&apos;t scan it? Enter the key by hand
         </summary>
         <p className="pt-1">

@@ -12,8 +12,8 @@ export default function CheckoutPage() {
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto w-full max-w-site flex-1 px-4 pb-20 pt-10 sm:px-10">
-        <h1 className="display mb-8 text-[clamp(2.5rem,6vw,4rem)] text-white">Checkout</h1>
+      <main className="mx-auto w-full max-w-site flex-1 px-4 pb-24 pt-10 sm:px-10">
+        <h1 className="display mb-8 text-center text-[clamp(2.5rem,6vw,4rem)] text-white">Checkout</h1>
         <CheckoutForm />
       </main>
       <SiteFooter />

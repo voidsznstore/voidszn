@@ -25,7 +25,13 @@ import {
   markPaid,
 } from "@/db/queries/admin-manual-orders";
 import { requireAdmin } from "@/lib/admin/session";
-import { sendOrderPlaced, sendOrderRefunded, sendOrderShipped } from "@/lib/email/order-emails";
+import {
+  sendOrderCancelled,
+  sendOrderDelivered,
+  sendOrderPlaced,
+  sendOrderRefunded,
+  sendOrderShipped,
+} from "@/lib/email/order-emails";
 import { SquareError, refundPayment } from "@/lib/payments/square";
 
 export type OrderActionState = { error?: string; done?: string };
@@ -197,14 +203,26 @@ export async function resendConfirmationAction(_previous: OrderActionState, form
   });
 }
 
+/** What to add to "done" after an email the owner asked for was, or wasn't, sent. */
+const emailedNote = (email: { sent: boolean; reason?: string }) =>
+  email.sent ? " The customer has been emailed." : ` The customer was not emailed: ${email.reason}`;
+
 export async function deliveredAction(_previous: OrderActionState, form: FormData) {
-  return run(form, "Marked as delivered.", (number, actor) => markDelivered(getDb(), number, actor));
+  let emailNote = "";
+  const result = await run(form, "Marked as delivered.", async (number, actor) => {
+    await markDelivered(getDb(), number, actor);
+    if (form.get("notify") === "on") emailNote = emailedNote(await sendOrderDelivered(number));
+  });
+  return result.done ? { done: `Marked as delivered.${emailNote}` } : result;
 }
 
 export async function cancelAction(_previous: OrderActionState, form: FormData) {
-  return run(form, "Order cancelled.", (number, actor) =>
-    cancelOrder(getDb(), number, actor, text(300).parse(form.get("reason") ?? "")),
-  );
+  let emailNote = "";
+  const result = await run(form, "Order cancelled.", async (number, actor) => {
+    await cancelOrder(getDb(), number, actor, text(300).parse(form.get("reason") ?? ""));
+    if (form.get("notify") === "on") emailNote = emailedNote(await sendOrderCancelled(number));
+  });
+  return result.done ? { done: `Order cancelled.${emailNote}` } : result;
 }
 
 export async function addressAction(_previous: OrderActionState, form: FormData) {

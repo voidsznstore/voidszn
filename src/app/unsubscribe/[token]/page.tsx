@@ -20,8 +20,8 @@ export default function UnsubscribePage({ params }: Props) {
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 pb-24 pt-12 sm:px-10">
-        <h1 className="display text-4xl text-white">Unsubscribe</h1>
+      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center gap-6 px-4 pb-24 pt-16 text-center sm:px-10">
+        <h1 className="display text-5xl text-white">Unsubscribe</h1>
         <Suspense fallback={<p className="text-bone-dim">Checking your link…</p>}>
           <Unsubscribe params={params} />
         </Suspense>
@@ -55,7 +55,7 @@ async function Unsubscribe({ params }: Pick<Props, "params">) {
     return (
       <p className="text-bone-dim">
         This unsubscribe link isn&apos;t valid any more. To stop our emails, write to{" "}
-        <a href={`mailto:${siteConfig.supportEmail}`} className="underline underline-offset-4">
+        <a href={`mailto:${siteConfig.supportEmail}`} className="link">
           {siteConfig.supportEmail}
         </a>{" "}
         and we&apos;ll take you off the list.

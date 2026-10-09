@@ -1,6 +1,9 @@
 import "server-only";
 import { getDb } from "@/db";
+import { markCartsRecovered } from "@/db/queries/carts";
 import { findSellables } from "@/db/queries/catalog";
+import { findDiscountByCode, findDiscountById } from "@/db/queries/discounts";
+import { subscribe } from "@/db/queries/subscribers";
 import { sendOrderPlaced } from "@/lib/email/order-emails";
 import {
   type PaidOrderInput,
@@ -104,6 +107,9 @@ export function readSquareOrder(
         country: address?.country ?? "",
       },
       shippingMethod: "Standard shipping",
+      discountCode: order.metadata?.discount_code ?? null,
+      discountCodeId: order.metadata?.discount_id ?? null,
+      wantsMarketing: order.metadata?.marketing === "yes",
       ...(attention.length ? { attention } : {}),
       items,
     },
@@ -176,6 +182,21 @@ export async function settlePayment(paymentId: string, event: EventRef): Promise
     console.error("[square] Could not link order lines to the catalog", error);
   }
 
+  // The code the customer used, if it still exists. Found by its id first, so a
+  // code renamed since the payment page was opened is still counted.
+  if (input.discountCode || input.discountCodeId) {
+    try {
+      const claimedId = input.discountCodeId;
+      const code =
+        (claimedId && /^[0-9a-f-]{36}$/i.test(claimedId) ? await findDiscountById(db, claimedId) : null) ??
+        (input.discountCode ? await findDiscountByCode(db, input.discountCode) : null);
+      input.discountCodeId = code?.id ?? null;
+    } catch (error) {
+      input.discountCodeId = null;
+      console.error("[square] Could not look up the discount code on a paid order", error);
+    }
+  }
+
   const result = await recordPaidOrder(db, input);
   const orderNumber =
     result.status === "created"
@@ -183,6 +204,26 @@ export async function settlePayment(paymentId: string, event: EventRef): Promise
       : await findOrderNumberByPaymentRef(db, input.paymentRef);
   // Only the call that actually created the order sends the confirmation, so the
   // customer gets exactly one.
-  if (result.status === "created") await sendOrderPlaced(result.orderNumber);
+  if (result.status === "created") {
+    // They paid, so the cart they started is no longer one to remind them about.
+    try {
+      await markCartsRecovered(db, {
+        email: input.email,
+        paymentOrderRef: payment.order_id,
+        orderNumber: result.orderNumber,
+      });
+    } catch (error) {
+      console.error("[square] Could not close the saved cart for a paid order", error);
+    }
+    // The marketing tick only counts now that the order is paid.
+    if (input.wantsMarketing) {
+      try {
+        await subscribe(db, input.email, "checkout");
+      } catch (error) {
+        console.error("[square] Could not add a buyer to the marketing list", error);
+      }
+    }
+    await sendOrderPlaced(result.orderNumber);
+  }
   return { status: "saved", orderNumber, order: input, receiptUrl: payment.receipt_url ?? null };
 }

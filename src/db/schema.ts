@@ -47,9 +47,15 @@ export type Address = {
   country: string;
 };
 
+/** One line of a cart someone started to pay for. Prices are as they were at that moment. */
 export type CartSnapshotItem = {
-  variantId: string;
+  slug: string;
+  name: string;
+  color: string;
+  size: string;
   quantity: number;
+  unitPriceCents: number;
+  imageUrl: string | null;
 };
 
 /* ------------------------------------------------------------------ */
@@ -94,7 +100,8 @@ export const fulfillmentStatus = pgEnum("fulfillment_status", [
   "CANCELLED",
 ]);
 
-export const discountType = pgEnum("discount_type", ["PERCENTAGE", "FIXED"]);
+/** FREE_SHIPPING takes shipping off the order and nothing off the items. */
+export const discountType = pgEnum("discount_type", ["PERCENTAGE", "FIXED", "FREE_SHIPPING"]);
 
 export const affiliateStatus = pgEnum("affiliate_status", [
   "PENDING",
@@ -508,8 +515,10 @@ export const discountCodes = pgTable(
     /** Always stored uppercase. */
     code: text("code").notNull().unique(),
     type: discountType("type").notNull(),
-    /** PERCENTAGE: 1 to 100. FIXED: cents. */
+    /** PERCENTAGE: 1 to 100. FIXED: cents. FREE_SHIPPING: not used, kept at 0. */
     value: integer("value").notNull(),
+    /** The owner's own reminder of what the code is for. Never shown to customers. */
+    note: text("note"),
     minOrderCents: integer("min_order_cents").notNull().default(0),
     maxUses: integer("max_uses"),
     usedCount: integer("used_count").notNull().default(0),
@@ -524,7 +533,10 @@ export const discountCodes = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    check("discount_codes_value_pos", sql`${t.value} > 0`),
+    check(
+      "discount_codes_value_pos",
+      sql`${t.value} > 0 OR ${t.type}::text = 'FREE_SHIPPING'`,
+    ),
     // The database itself refuses to count past the limit, even if two checkouts race.
     check(
       "discount_codes_usage_within_limit",
@@ -670,11 +682,17 @@ export const campaigns = pgTable("campaigns", {
   subject: text("subject").notNull(),
   /** The line mail apps show after the subject. */
   preheader: text("preheader"),
+  /** The big line at the top of the email. The subject is used when this is empty. */
+  heading: text("heading"),
   /** Plain text. A blank line starts a new paragraph. */
   body: text("body").notNull(),
   imageUrl: text("image_url"),
   buttonLabel: text("button_label"),
   buttonUrl: text("button_url"),
+  /** A code to show in the email. The button applies it for whoever taps through. */
+  discountCodeId: uuid("discount_code_id").references(() => discountCodes.id, {
+    onDelete: "set null",
+  }),
   status: campaignStatus("status").notNull().default("DRAFT"),
   createdBy: text("created_by").notNull(),
   createdAt: createdAt(),
@@ -732,10 +750,19 @@ export const abandonedCarts = pgTable(
       onDelete: "set null",
     }),
     lastEmailedAt: timestamp("last_emailed_at", { withTimezone: true }),
+    /** How many reminders have gone out for this cart. */
+    emailsSent: integer("emails_sent").notNull().default(0),
+    /** The payment page that was opened for this cart, to match it to the order if they pay. */
+    paymentOrderRef: text("payment_order_ref"),
+    /** When the customer last started checkout with this cart. Reminders count from here. */
+    leftAt: timestamp("left_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("abandoned_carts_status_idx").on(t.status, t.createdAt)],
+  (t) => [
+    index("abandoned_carts_status_idx").on(t.status, t.createdAt),
+    index("abandoned_carts_email_idx").on(t.email),
+  ],
 );
 
 export const reviews = pgTable(

@@ -19,14 +19,16 @@ export function InfoPage({ title, intro, policy = false, children }: InfoPagePro
     <>
       <SiteHeader />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-24 pt-12 sm:px-10">
-        <header className="flex flex-col gap-4 border-b border-line pb-8">
-          <h1 className="display text-[clamp(2.75rem,7vw,4.5rem)] text-white">{title}</h1>
-          {intro ? <p className="text-lg text-bone-dim">{intro}</p> : null}
+        <header className="flex flex-col items-center gap-4 border-b border-line pb-9 text-center">
+          <h1 className="display text-[clamp(2.75rem,7vw,4.5rem)] text-white [text-shadow:0_0_42px_rgb(237_234_227/0.18)]">
+            {title}
+          </h1>
+          {intro ? <p className="max-w-xl text-balance text-lg text-bone-dim">{intro}</p> : null}
           {policy ? (
-            <p className="label text-xs text-smoke">Last updated {siteConfig.policiesUpdated}</p>
+            <p className="text-sm text-smoke">Last updated {siteConfig.policiesUpdated}</p>
           ) : null}
           {isDraft ? (
-            <p className="border border-accent px-4 py-3 text-sm text-bone">
+            <p className="rounded-field border border-accent/60 bg-accent/10 px-4 py-3 text-sm text-bone">
               Draft. Details shown in [brackets] still need to be filled in before the store
               opens.
             </p>

@@ -168,7 +168,14 @@ export const ORDER_SOURCE = "voidszn-site";
  */
 export async function createCheckout(input: {
   lines: CheckoutLine[];
+  /** Zero when a code makes shipping free. */
   shippingCents: number;
+  /** A discount code that has already been checked and priced on the server. */
+  discount?: { id: string; code: string; label: string; discountCents: number } | null;
+  /** Ticked "email me new designs and offers". Acted on only once they have paid. */
+  wantsMarketing?: boolean;
+  /** Fills in the email on the payment page, so the customer doesn't type it twice. */
+  buyerEmail?: string | null;
   redirectUrl: string;
 }): Promise<{ url: string; orderId: string }> {
   const account = await getAccount();
@@ -178,7 +185,15 @@ export async function createCheckout(input: {
     idempotency_key: randomUUID(),
     order: {
       location_id: account.locationId,
-      metadata: { source: ORDER_SOURCE },
+      metadata: {
+        source: ORDER_SOURCE,
+        // Carried on the order so the code is known when the payment comes back. The
+        // id survives the code being renamed in the meantime.
+        ...(input.discount
+          ? { discount_code: input.discount.code, discount_id: input.discount.id }
+          : {}),
+        ...(input.wantsMarketing ? { marketing: "yes" } : {}),
+      },
       line_items: input.lines.map((line) => ({
         name: line.name,
         variation_name: `${line.color} / ${line.size}`,
@@ -186,11 +201,27 @@ export async function createCheckout(input: {
         base_price_money: money(line.unitPriceCents),
         metadata: { slug: line.slug, color: line.color, size: line.size },
       })),
+      // Taken off the items, never off shipping.
+      ...(input.discount && input.discount.discountCents > 0
+        ? {
+            discounts: [
+              {
+                uid: "code",
+                name: `${input.discount.code} (${input.discount.label})`,
+                amount_money: money(input.discount.discountCents),
+                scope: "ORDER",
+              },
+            ],
+          }
+        : {}),
     },
+    ...(input.buyerEmail ? { pre_populated_data: { buyer_email: input.buyerEmail } } : {}),
     checkout_options: {
       redirect_url: input.redirectUrl,
       ask_for_shipping_address: true,
-      shipping_fee: { name: "Standard shipping", charge: money(input.shippingCents) },
+      ...(input.shippingCents > 0
+        ? { shipping_fee: { name: "Standard shipping", charge: money(input.shippingCents) } }
+        : {}),
       merchant_support_email: siteConfig.supportEmail,
       allow_tipping: false,
       enable_coupon: false,

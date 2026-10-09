@@ -43,7 +43,7 @@ function CodeField({ label, hint, wide = false }: { label: string; hint?: string
 
 function FormError({ message }: { message?: string }) {
   return (
-    <p role="alert" aria-live="polite" className="min-h-6 text-sm text-accent">
+    <p role="alert" aria-live="polite" className="min-h-6 text-sm text-ember">
       {message}
     </p>
   );
@@ -53,7 +53,7 @@ function FormError({ message }: { message?: string }) {
 export function RecoveryCodes({ codes }: { codes: string[] }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="flex flex-col gap-4 border border-accent p-5">
+    <div className="flex flex-col gap-4 notice p-5">
       <div>
         <h2 className="text-lg font-semibold text-white">Save your recovery codes</h2>
         <p className="text-sm text-bone-dim">
@@ -77,7 +77,7 @@ export function RecoveryCodes({ codes }: { codes: string[] }) {
               setCopied(false);
             }
           }}
-          className="btn btn-outline min-h-11 px-5"
+          className="btn btn-glass min-h-11 px-5"
         >
           Copy codes
         </button>
@@ -102,13 +102,13 @@ export function VerifyForm() {
         <CodeField key="app" label="Six-digit code" hint="From the VOIDSZN entry in your authenticator app." />
       )}
       <FormError message={state.error} />
-      <button type="submit" disabled={pending} className="btn btn-accent w-full disabled:opacity-60">
+      <button type="submit" disabled={pending} className="btn btn-accent w-full">
         {pending ? "Checking…" : "Sign in"}
       </button>
       <button
         type="button"
         onClick={() => setUseRecovery(!useRecovery)}
-        className="inline-flex min-h-11 items-center justify-center text-sm text-smoke underline underline-offset-4 hover:text-bone"
+        className="inline-flex min-h-11 items-center justify-center text-sm text-smoke link"
       >
         {useRecovery ? "Use the authenticator app instead" : "Lost your phone? Use a recovery code"}
       </button>
@@ -138,7 +138,7 @@ export function EnrolForm() {
     <form action={action} onSubmit={onSubmit} className="flex flex-col gap-5">
       <CodeField label="Six-digit code from the app" />
       <FormError message={state.error} />
-      <button type="submit" disabled={pending} className="btn btn-accent w-full disabled:opacity-60">
+      <button type="submit" disabled={pending} className="btn btn-accent w-full">
         {pending ? "Checking…" : "Turn on two-step sign-in"}
       </button>
     </form>
@@ -156,7 +156,7 @@ export function SecurityCodeForm({ kind }: { kind: "recovery-codes" | "replace-a
     <form action={action} onSubmit={onSubmit} className="flex max-w-sm flex-col gap-4">
       <CodeField label="Current six-digit code" hint="From your authenticator app, to confirm it's you." wide />
       <FormError message={state.error} />
-      <button type="submit" disabled={pending} className="btn btn-outline min-h-11 px-5 disabled:opacity-60">
+      <button type="submit" disabled={pending} className="btn btn-glass min-h-11 px-5">
         {pending
           ? "Checking…"
           : kind === "recovery-codes"

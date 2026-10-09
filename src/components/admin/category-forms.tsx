@@ -31,11 +31,11 @@ export function NewCategoryForm({ kind, label }: { kind: "PRODUCT_TYPE" | "INTER
           placeholder={label}
           className="input min-w-0 flex-1"
         />
-        <button type="submit" disabled={pending} className="btn btn-outline min-h-[2.875rem] px-5 disabled:opacity-60">
+        <button type="submit" disabled={pending} className="btn btn-glass min-h-[2.875rem] px-5">
           {pending ? "Adding…" : "Add"}
         </button>
       </div>
-      <p role="alert" className="min-h-5 text-sm text-accent">
+      <p role="alert" className="min-h-5 text-sm text-ember">
         {state.error}
       </p>
     </form>
@@ -72,10 +72,10 @@ export function EditCategoryForm({
         <span>Show this category on the store</span>
       </label>
       <div className="flex items-center gap-4">
-        <button type="submit" disabled={pending} className="btn btn-accent disabled:opacity-60">
+        <button type="submit" disabled={pending} className="btn btn-accent">
           {pending ? "Saving…" : "Save"}
         </button>
-        <p aria-live="polite" className={`text-sm ${state.error ? "text-accent" : "text-smoke"}`}>
+        <p aria-live="polite" className={`text-sm ${state.error ? "text-ember" : "text-smoke"}`}>
           {state.error ?? (state.saved && !pending ? "Saved." : "")}
         </p>
       </div>

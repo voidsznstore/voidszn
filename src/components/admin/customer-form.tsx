@@ -120,10 +120,10 @@ export function CustomerForm({ customer, unsubscribedOn }: Props) {
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <button type="submit" disabled={pending} className="btn btn-accent disabled:opacity-60">
+        <button type="submit" disabled={pending} className="btn btn-accent">
           {pending ? "Saving…" : customer.id ? "Save" : "Add customer"}
         </button>
-        <p role="alert" aria-live="polite" className={`text-sm ${state.error ? "text-accent" : "text-smoke"}`}>
+        <p role="alert" aria-live="polite" className={`text-sm ${state.error ? "text-ember" : "text-smoke"}`}>
           {state.error ?? (state.saved && !pending ? `Saved. ${state.note ?? ""}`.trim() : "")}
         </p>
       </div>
@@ -138,7 +138,7 @@ export function DeleteCustomerForm({ id }: { id: string }) {
     <form action={action} onSubmit={onSubmit} className="flex flex-col gap-2">
       <input type="hidden" name="id" value={id} />
       <ConfirmButton label="Delete this customer" confirmLabel="Delete customer" />
-      <p role="alert" className="text-sm text-accent">
+      <p role="alert" className="text-sm text-ember">
         {state.error}
       </p>
     </form>

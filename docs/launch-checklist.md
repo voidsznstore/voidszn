@@ -43,6 +43,14 @@ advice. Have a lawyer read the policy pages before the store takes real orders.
       Campaigns in the admin add the address and unsubscribe link by themselves and
       won't send until `mailingAddress` in `site-config.ts` is filled in. Only tick
       "Agreed to get marketing emails" for people who actually said yes.
+- [ ] Cart reminders: these go to anyone who typed their email at checkout and left,
+      whether or not they ticked the marketing box, and checkout says so next to the
+      email field. They count as marketing email, so they carry the address and an
+      unsubscribe link. Keep that sentence at checkout and the matching lines in the
+      Privacy page for as long as reminders are switched on (Campaigns, Automatic
+      emails). Have the lawyer confirm this is fine for every state you ship to.
+- [ ] Discounts: a "sale" price or code must be a real saving, and an end date in an
+      email must be the code's real end date.
 - [ ] Texts (TCPA): only to people who gave written consent through an unchecked box or
       explicit sign-up, with message frequency, "Msg and data rates may apply", and
       STOP/HELP wording at the point of sign-up.

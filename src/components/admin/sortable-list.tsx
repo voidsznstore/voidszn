@@ -99,7 +99,7 @@ export function SortableList({ items, save, noun }: SortableListProps) {
               aria-label={`Move ${noun} ${item.title} up`}
               disabled={index === 0}
               onClick={() => move(index, index - 1)}
-              className="h-11 w-11 border border-line-strong disabled:border-line disabled:text-line-strong"
+              className="h-11 w-11 rounded-full border border-line-strong hover:bg-white/10 disabled:border-line disabled:text-line-strong"
             >
               ↑
             </button>
@@ -108,7 +108,7 @@ export function SortableList({ items, save, noun }: SortableListProps) {
               aria-label={`Move ${noun} ${item.title} down`}
               disabled={index === order.length - 1}
               onClick={() => move(index, index + 1)}
-              className="h-11 w-11 border border-line-strong disabled:border-line disabled:text-line-strong"
+              className="h-11 w-11 rounded-full border border-line-strong hover:bg-white/10 disabled:border-line disabled:text-line-strong"
             >
               ↓
             </button>

@@ -16,7 +16,7 @@ export function ConfirmButton({ label, confirmLabel }: { label: string; confirmL
       <button
         type="button"
         onClick={() => setAsking(true)}
-        className="inline-flex min-h-11 items-center text-sm text-smoke underline underline-offset-4 hover:text-bone"
+        className="inline-flex min-h-11 items-center text-sm text-smoke link"
       >
         {label}
       </button>
@@ -25,13 +25,13 @@ export function ConfirmButton({ label, confirmLabel }: { label: string; confirmL
 
   return (
     <span className="flex flex-wrap items-center gap-3">
-      <button type="submit" disabled={pending} className="btn btn-outline min-h-11 px-5 disabled:opacity-60">
+      <button type="submit" disabled={pending} className="btn btn-glass min-h-11 px-5">
         {pending ? "Deleting…" : confirmLabel}
       </button>
       <button
         type="button"
         onClick={() => setAsking(false)}
-        className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+        className="inline-flex min-h-11 items-center text-sm link"
       >
         Cancel
       </button>

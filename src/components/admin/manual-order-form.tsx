@@ -185,7 +185,7 @@ function OrderEditor({ products, paymentMethods, canEmail, customer }: Props) {
     });
   }
 
-  const panel = "flex flex-col gap-4 border border-line bg-ash-soft p-5";
+  const panel = "flex flex-col gap-4 panel p-5";
   const heading = "text-lg font-semibold text-white";
   const small = "text-[0.8125rem] text-smoke";
   const labelClass = "text-sm font-semibold";
@@ -256,7 +256,7 @@ function OrderEditor({ products, paymentMethods, canEmail, customer }: Props) {
                         <button
                           type="button"
                           onClick={() => setRows(rows.filter((item) => item.key !== row.key))}
-                          className="inline-flex min-h-[2.875rem] items-center px-2 text-sm text-smoke underline underline-offset-4 hover:text-bone"
+                          className="inline-flex min-h-[2.875rem] items-center px-2 text-sm text-smoke link"
                         >
                           Remove<span className="sr-only"> item {index + 1}</span>
                         </button>
@@ -378,7 +378,7 @@ function OrderEditor({ products, paymentMethods, canEmail, customer }: Props) {
             <button
               type="button"
               onClick={() => setRows([...rows, blankRow()])}
-              className="btn btn-outline min-h-11 self-start px-5"
+              className="btn btn-glass min-h-11 self-start px-5"
             >
               Add another item
             </button>
@@ -574,10 +574,10 @@ function OrderEditor({ products, paymentMethods, canEmail, customer }: Props) {
           ) : null}
 
           <div className="flex flex-col gap-3">
-            <button type="submit" disabled={pending} className="btn btn-accent disabled:opacity-60">
+            <button type="submit" disabled={pending} className="btn btn-accent">
               {pending ? "Adding…" : `Add order · ${formatMoney(Math.max(0, totalCents))}`}
             </button>
-            <p role="alert" aria-live="polite" className="text-sm text-accent">
+            <p role="alert" aria-live="polite" className="text-sm text-ember">
               {error ?? ""}
             </p>
           </div>

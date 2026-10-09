@@ -34,6 +34,8 @@ export type PricedLine = {
   unitPriceCents: number;
   /** Product type slug, e.g. "t-shirts". Drives the shipping rate. */
   typeSlug: string | null;
+  /** A photo of this color, when the product has one. */
+  imageUrl: string | null;
 };
 
 export type PricedCart = {
@@ -106,6 +108,7 @@ export async function priceCart(input: CartLineInput[]): Promise<PriceResult> {
       quantity: line.quantity,
       unitPriceCents: sellable.priceCents,
       typeSlug: sellable.typeSlug,
+      imageUrl: sellable.imageUrl,
     });
   }
 

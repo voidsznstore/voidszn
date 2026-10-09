@@ -18,7 +18,8 @@
     "test:totp": "tsx scripts/totp-test.ts",
     "test:manual-order": "tsx scripts/manual-order-test.ts",
     "test:inbox": "tsx --conditions=react-server scripts/inbox-test.ts",
-    "test:campaign": "tsx --conditions=react-server scripts/campaign-test.ts"
+    "test:campaign": "tsx --conditions=react-server scripts/campaign-test.ts",
+    "test:discounts": "tsx --conditions=react-server scripts/discount-test.ts"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",

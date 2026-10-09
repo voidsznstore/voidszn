@@ -15,7 +15,7 @@ export const siteConfig = {
   /** Registered legal name of the business, e.g. "Voidszn LLC". */
   legalName: "[LEGAL BUSINESS NAME]",
   /** Physical mailing address. Required in marketing emails by CAN-SPAM. */
-  mailingAddress: "[BUSINESS MAILING ADDRESS]",
+  mailingAddress: "14735 Gainsborough CT, Orlando, FL 32832",
   supportEmail: "support@voidszn.com",
   /** The address order emails are sent from. Replies go to the support address. */
   ordersEmail: "orders@voidszn.com",
@@ -29,7 +29,7 @@ export const siteConfig = {
   governingState: "[GOVERNING STATE]",
   /** Time zone the admin shows order dates in. */
   timeZone: "America/New_York",
-  policiesUpdated: "October 8, 2026",
+  policiesUpdated: "October 9, 2026",
 
   shipping: {
     regions: "the United States",

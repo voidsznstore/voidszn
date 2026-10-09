@@ -29,7 +29,7 @@ async function Setup({ searchParams }: Pick<PageProps<"/admin/setup">, "searchPa
         <p className="text-bone-dim">
           This setup link has already been used or has expired. If you have an account, sign in.
         </p>
-        <Link href="/admin/login" className="btn btn-outline">
+        <Link href="/admin/login" className="btn btn-glass">
           Sign in
         </Link>
       </div>

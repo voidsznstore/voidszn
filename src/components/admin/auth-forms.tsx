@@ -42,7 +42,7 @@ function Field({
 
 function FormError({ message }: { message?: string }) {
   return (
-    <p role="alert" aria-live="polite" className="min-h-6 text-sm text-accent">
+    <p role="alert" aria-live="polite" className="min-h-6 text-sm text-ember">
       {message}
     </p>
   );
@@ -68,12 +68,12 @@ export function SignInForm() {
         required
       />
       <FormError message={state.error} />
-      <button type="submit" disabled={pending} className="btn btn-accent w-full disabled:opacity-60">
+      <button type="submit" disabled={pending} className="btn btn-accent w-full">
         {pending ? "Signing in…" : "Sign in"}
       </button>
       <Link
         href="/admin/forgot"
-        className="inline-flex min-h-11 items-center justify-center text-sm text-smoke underline underline-offset-4 hover:text-bone"
+        className="inline-flex min-h-11 items-center justify-center text-sm text-smoke link"
       >
         Forgot your password?
       </Link>
@@ -120,7 +120,7 @@ export function SetupForm({ code, minLength }: { code: string; minLength: number
         required
       />
       <FormError message={state.error} />
-      <button type="submit" disabled={pending} className="btn btn-accent w-full disabled:opacity-60">
+      <button type="submit" disabled={pending} className="btn btn-accent w-full">
         {pending ? "Creating your account…" : "Create account"}
       </button>
     </form>
@@ -133,7 +133,7 @@ export function ForgotForm() {
 
   if (state.sent) {
     return (
-      <p className="border border-line bg-ash-soft px-4 py-4 text-center text-bone-dim">
+      <p className="panel px-4 py-4 text-center text-bone-dim">
         If that email has an admin account, a reset link is on its way. It works for an hour.
         Check your spam folder if you don&apos;t see it.
       </p>
@@ -144,7 +144,7 @@ export function ForgotForm() {
     <form action={action} onSubmit={onSubmit} className="flex flex-col gap-5">
       <Field label="Email" name="email" type="email" autoComplete="username" required />
       <FormError message={state.error} />
-      <button type="submit" disabled={pending} className="btn btn-accent w-full disabled:opacity-60">
+      <button type="submit" disabled={pending} className="btn btn-accent w-full">
         {pending ? "Sending…" : "Email me a reset link"}
       </button>
     </form>
@@ -175,7 +175,7 @@ export function NewPasswordForm({ token, minLength }: { token: string; minLength
         required
       />
       <FormError message={state.error} />
-      <button type="submit" disabled={pending} className="btn btn-accent w-full disabled:opacity-60">
+      <button type="submit" disabled={pending} className="btn btn-accent w-full">
         {pending ? "Saving…" : "Set new password"}
       </button>
     </form>
@@ -208,10 +208,10 @@ export function ChangePasswordForm({ minLength }: { minLength: number }) {
       />
       <Field label="New password again" name="confirm" type="password" autoComplete="new-password" minLength={minLength} required />
       <div className="flex flex-wrap items-center gap-4">
-        <button type="submit" disabled={pending} className="btn btn-outline min-h-11 px-5 disabled:opacity-60">
+        <button type="submit" disabled={pending} className="btn btn-glass min-h-11 px-5">
           {pending ? "Saving…" : "Change password"}
         </button>
-        <p role="alert" aria-live="polite" className={`text-sm ${state.error ? "text-accent" : "text-smoke"}`}>
+        <p role="alert" aria-live="polite" className={`text-sm ${state.error ? "text-ember" : "text-smoke"}`}>
           {state.error ?? (state.done ? "Password changed. Other browsers were signed out." : "")}
         </p>
       </div>

@@ -24,7 +24,7 @@ export default function CollectionPage({ params }: Props) {
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto w-full max-w-site flex-1 px-4 pb-20 sm:px-10">
+      <main className="mx-auto w-full max-w-site flex-1 px-4 pb-24 pt-2 sm:px-10">
         {/* Categories added after the last deploy load here on their first visit. */}
         <Suspense fallback={<div className="min-h-[70vh]" aria-busy="true" />}>
           <CollectionContent params={params} />
@@ -46,19 +46,23 @@ async function CollectionContent({ params }: Pick<Props, "params">) {
     <>
       <nav
         aria-label="Breadcrumb"
-        className="label flex min-h-14 flex-wrap items-center gap-2 text-xs text-smoke"
+        className="flex min-h-14 flex-wrap items-center justify-center gap-2 text-sm text-smoke"
       >
         <Link href="/" className="inline-flex min-h-11 items-center hover:text-bone">
           Home
         </Link>
         <span aria-hidden="true">/</span>
-        <span className="text-bone">{collection.name}</span>
+        <span aria-current="page" className="text-bone">
+          {collection.name}
+        </span>
       </nav>
 
-      <header className="flex flex-col gap-3 pb-8 pt-4">
-        <h1 className="display text-[clamp(3rem,8vw,5.5rem)] text-white">{collection.name}</h1>
+      <header className="flex flex-col items-center gap-4 pb-10 pt-2 text-center">
+        <h1 className="display text-[clamp(3rem,8vw,5.5rem)] text-white [text-shadow:0_0_42px_rgb(237_234_227/0.18)]">
+          {collection.name}
+        </h1>
         {collection.description ? (
-          <p className="max-w-xl text-lg text-bone-dim">{collection.description}</p>
+          <p className="max-w-xl text-balance text-lg text-bone-dim">{collection.description}</p>
         ) : null}
       </header>
 

@@ -40,7 +40,7 @@ export default function OrderPage({ params }: Props) {
   );
 }
 
-const panel = "flex flex-col gap-4 border border-line bg-ash-soft p-5";
+const panel = "flex flex-col gap-4 panel p-5";
 const heading = "text-lg font-semibold text-white";
 const small = "text-[0.8125rem] text-smoke";
 
@@ -123,12 +123,12 @@ async function Order({ params }: Pick<Props, "params">) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
-        <Link href="/admin/orders" className="text-sm text-smoke underline underline-offset-4 hover:text-bone">
+        <Link href="/admin/orders" className="text-sm text-smoke link">
           All orders
         </Link>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <h1 className="display text-4xl text-white">{order.orderNumber}</h1>
-          <span className="label border border-line-strong px-3 py-1.5 text-xs">
+          <span className="tag">
             {statusLabel(order.status)}
           </span>
         </div>
@@ -136,7 +136,7 @@ async function Order({ params }: Pick<Props, "params">) {
       </header>
 
       {attention.length > 0 ? (
-        <section className="flex flex-col gap-3 border border-accent p-5">
+        <section className="flex flex-col gap-3 notice p-5">
           <h2 className={heading}>Needs attention</h2>
           <ul className="list-disc pl-5 text-bone-dim">
             {attention.map((message) => (
@@ -159,7 +159,7 @@ async function Order({ params }: Pick<Props, "params">) {
             <ul className="flex flex-col">
               {items.map((item) => (
                 <li key={item.id} className="flex gap-4 border-b border-line py-3 last:border-b-0">
-                  <span className="relative block h-16 w-[3.25rem] flex-none overflow-hidden bg-well">
+                  <span className="relative block h-16 w-[3.25rem] flex-none well overflow-hidden !rounded-[0.5rem]">
                     {item.imageUrl ? (
                       <Image src={item.imageUrl} alt="" fill sizes="3.25rem" className="object-cover" />
                     ) : null}
@@ -170,7 +170,7 @@ async function Order({ params }: Pick<Props, "params">) {
                       {item.quantity > 1 ? ` × ${item.quantity}` : ""}
                     </p>
                     {optionLabel(item) ? (
-                      <p className="label text-xs text-smoke">{optionLabel(item)}</p>
+                      <p className="label text-smoke">{optionLabel(item)}</p>
                     ) : null}
                     <p className="font-mono text-xs text-smoke">{item.sku}</p>
                   </div>
@@ -183,10 +183,21 @@ async function Order({ params }: Pick<Props, "params">) {
             <dl className="flex flex-col gap-1.5 border-t border-line pt-4 text-sm">
               {[
                 ["Subtotal", formatMoney(order.subtotalCents)],
-                order.discountCents > 0 ? ["Discount", `-${formatMoney(order.discountCents)}`] : null,
+                order.discountCents > 0
+                  ? [
+                      `Discount${order.discountCodeText ? ` (${order.discountCodeText})` : ""}`,
+                      `-${formatMoney(order.discountCents)}`,
+                    ]
+                  : null,
                 isPickup && order.shippingCents === 0
                   ? null
-                  : ["Shipping", formatMoney(order.shippingCents)],
+                  : [
+                      // A free shipping code takes nothing off the items, so it shows here.
+                      order.shippingCents === 0 && order.discountCents === 0 && order.discountCodeText
+                        ? `Shipping (${order.discountCodeText})`
+                        : "Shipping",
+                      formatMoney(order.shippingCents),
+                    ],
                 order.taxCents > 0 ? ["Tax", formatMoney(order.taxCents)] : null,
               ]
                 .filter((row) => row !== null)
@@ -201,7 +212,7 @@ async function Order({ params }: Pick<Props, "params">) {
                 <dd className="font-mono">{formatMoney(order.totalCents)}</dd>
               </div>
               {order.refundedCents > 0 ? (
-                <div className="flex justify-between text-accent">
+                <div className="flex justify-between text-ember">
                   <dt>Refunded</dt>
                   <dd className="font-mono">-{formatMoney(order.refundedCents)}</dd>
                 </div>
@@ -276,7 +287,7 @@ async function Order({ params }: Pick<Props, "params">) {
                   <p>
                     Tracking:{" "}
                     {order.trackingUrl ? (
-                      <a href={order.trackingUrl} rel="noreferrer" target="_blank" className="font-mono underline underline-offset-4">
+                      <a href={order.trackingUrl} rel="noreferrer" target="_blank" className="font-mono link">
                         {order.trackingNumber}
                       </a>
                     ) : (
@@ -288,7 +299,7 @@ async function Order({ params }: Pick<Props, "params">) {
                 {emailsOn ? null : (
                   <>
                     <p className="pt-2">
-                      <a href={trackingEmail(detail)} className="btn btn-outline min-h-11 px-5">
+                      <a href={trackingEmail(detail)} className="btn btn-glass min-h-11 px-5">
                         Email tracking to the customer
                       </a>
                     </p>
@@ -339,7 +350,14 @@ async function Order({ params }: Pick<Props, "params">) {
                 action={deliveredAction}
                 orderNumber={order.orderNumber}
                 submitLabel="Mark as delivered"
-              />
+              >
+                {emailsOn ? (
+                  <label className="flex min-h-11 items-center gap-3">
+                    <input type="checkbox" name="notify" defaultChecked={!isPickup} className="h-5 w-5 accent-[var(--color-accent)]" />
+                    <span>Email the customer that it arrived</span>
+                  </label>
+                ) : null}
+              </OrderActionForm>
             ) : null}
 
             {order.status === "CANCELLED" ? (
@@ -403,19 +421,19 @@ async function Order({ params }: Pick<Props, "params">) {
           <section className={panel}>
             <h2 className={heading}>Customer</h2>
             <div className="flex flex-col gap-1 text-bone-dim">
-              <a href={`mailto:${order.email}`} className="underline underline-offset-4">
+              <a href={`mailto:${order.email}`} className="link">
                 {order.email}
               </a>
               <Link
                 href={`/admin/customers/${order.customerId}`}
-                className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                className="inline-flex min-h-11 items-center text-sm link"
               >
                 Their details and other orders
               </Link>
               {isInboxConfigured() ? (
                 <Link
                   href={`/admin/inbox/new?to=${encodeURIComponent(order.email)}&subject=${encodeURIComponent(`Your ${siteConfig.name} order ${order.orderNumber}`)}`}
-                  className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                  className="inline-flex min-h-11 items-center text-sm link"
                 >
                   Write to them about this order
                 </Link>
@@ -461,11 +479,11 @@ async function Order({ params }: Pick<Props, "params">) {
                 Pickup or handed over. Nothing to ship.
               </p>
             ) : (
-              <p className="text-accent">No address on this order. Add it before fulfilling.</p>
+              <p className="text-ember">No address on this order. Add it before fulfilling.</p>
             )}
             {open ? (
               <details open={!hasAddress && !isPickup}>
-                <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm underline underline-offset-4">
+                <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm link">
                   {hasAddress ? "Change address" : isPickup ? "Ship it instead" : "Add address"}
                 </summary>
                 <div className="pt-2">
@@ -568,7 +586,7 @@ async function Order({ params }: Pick<Props, "params">) {
                     : "This order wasn't paid through the site, so cancelling here returns no money. Give it back the way it was paid."}
               </p>
               <details>
-                <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm underline underline-offset-4">
+                <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm link">
                   Cancel this order
                 </summary>
                 <div className="pt-2">
@@ -579,6 +597,12 @@ async function Order({ params }: Pick<Props, "params">) {
                     pendingLabel="Cancelling…"
                   >
                     <Field label="Reason (optional)" name="reason" placeholder="Customer asked within the hour" />
+                    {emailsOn ? (
+                      <label className="flex min-h-11 items-center gap-3">
+                        <input type="checkbox" name="notify" defaultChecked className="h-5 w-5 accent-[var(--color-accent)]" />
+                        <span>Email the customer that it was cancelled</span>
+                      </label>
+                    ) : null}
                   </OrderActionForm>
                 </div>
               </details>

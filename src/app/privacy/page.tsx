@@ -38,6 +38,10 @@ export default function PrivacyPage() {
           choose to submit.
         </li>
         <li>
+          <strong>Checkout details:</strong> the email address you enter at checkout and what is
+          in your cart at that moment, kept even if you don&apos;t finish paying.
+        </li>
+        <li>
           <strong>Marketing sign-up:</strong> your email address, and your phone number if you
           opt in to texts.
         </li>
@@ -58,6 +62,10 @@ export default function PrivacyPage() {
       <ul>
         <li>To take payment, make your order and deliver it.</li>
         <li>To send order confirmations, shipping updates and replies to your questions.</li>
+        <li>
+          To remind you about a cart you started to pay for and left. These reminders stop when
+          you order, after a few days, or as soon as you unsubscribe from one.
+        </li>
         <li>To send marketing emails or texts, only if you signed up for them.</li>
         <li>To prevent fraud and keep the site secure.</li>
         <li>To understand what is working on the site and improve it.</li>
@@ -90,8 +98,9 @@ export default function PrivacyPage() {
 
       <h2>Marketing messages</h2>
       <p>
-        Every marketing email has an unsubscribe link. Reply STOP to any marketing text to stop
-        them. Order and shipping messages are not marketing and are sent regardless.
+        Every marketing email and every cart reminder has an unsubscribe link, and using it
+        stops both. Reply STOP to any marketing text to stop them. Order and shipping messages
+        are not marketing and are sent regardless.
       </p>
 
       <h2>Your choices and rights</h2>
@@ -110,7 +119,8 @@ export default function PrivacyPage() {
       <h2>How long we keep it</h2>
       <p>
         We keep order records for as long as tax and accounting rules require. We keep marketing
-        details until you unsubscribe, and messages for as long as needed to resolve them.
+        details until you unsubscribe, and messages for as long as needed to resolve them. A
+        cart you left at checkout stops being used for reminders after a week.
       </p>
 
       <h2>Security</h2>
@@ -137,7 +147,7 @@ export default function PrivacyPage() {
       <p>
         {legalName}
         <br />
-        {mailingAddress}
+        <span className="fine-print">{mailingAddress}</span>
         <br />
         <Email address={supportEmail} />
       </p>

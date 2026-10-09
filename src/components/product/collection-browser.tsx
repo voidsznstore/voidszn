@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { CatalogProduct } from "@/lib/catalog/types";
 import { ProductCard } from "./product-card";
@@ -34,24 +35,27 @@ export function CollectionBrowser({ products }: { products: CatalogProduct[] }) 
 
   if (products.length === 0) {
     return (
-      <p className="border border-line bg-ash-soft px-5 py-10 text-center text-bone-dim">
-        Nothing here yet. New designs are on the way.
-      </p>
+      <div className="panel mx-auto flex max-w-xl flex-col items-center gap-5 px-6 py-14 text-center">
+        <p className="text-bone-dim">Nothing here yet. New designs are on the way.</p>
+        <Link href="/collections/all" className="btn btn-glass">
+          Shop all
+        </Link>
+      </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="label text-xs text-smoke">
+        <p className="num text-sm text-smoke">
           {products.length} {products.length === 1 ? "product" : "products"}
         </p>
-        <label className="flex items-center gap-3 text-sm">
-          <span className="label text-xs text-smoke">Sort</span>
+        <label className="flex items-center gap-3 text-sm text-smoke">
+          Sort
           <select
             value={sort}
             onChange={(event) => setSort(event.target.value as Sort)}
-            className="min-h-11 border border-line-strong bg-void px-3 text-bone"
+            className="input min-h-11 w-auto !rounded-full py-0 pl-4 text-sm"
           >
             {Object.entries(SORTS).map(([value, label]) => (
               <option key={value} value={value}>
@@ -62,7 +66,7 @@ export function CollectionBrowser({ products }: { products: CatalogProduct[] }) 
         </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-9 sm:gap-x-6 lg:grid-cols-4">
         {sorted.map((product) => (
           <ProductCard key={product.slug} product={product} />
         ))}

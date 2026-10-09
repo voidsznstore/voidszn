@@ -34,6 +34,9 @@ npm run dev                  # http://localhost:3000
 | `npm run db:migrate` | Apply pending migrations to `DATABASE_URL` |
 | `npm run db:studio` | Browse the database in a local UI |
 | `npm run db:smoke` | Constraint and race-condition checks. Scratch databases only. |
+| `npm run test:checkout` | Pricing and the paid-order writer |
+| `npm run test:discounts` | Discount codes, saved carts, email contents, admin dates |
+| `npm run test:campaign` | Campaign sending never reaches anyone twice |
 
 ## Changing the database
 
@@ -54,7 +57,7 @@ the build fails and the previous version of the site stays live.
 - **Cost stays private.** `costCents` is never selected in a public query.
 - **No stock tracking.** Everything is printed to order.
 - **Payments are confirmed by signed webhook only**, never by the return URL. Each webhook event is stored once in `webhook_events` so replays are ignored.
-- **Discount limits are enforced in the database.** See `src/db/queries/discounts.ts`.
+- **Discounts are worked out on the server** (`src/lib/checkout/discounts.ts`), and their use limits are enforced in the database (`src/db/queries/discounts.ts`).
 - **Payment and fulfillment are provider-neutral.** Fields are named `paymentRef`, `externalOrderId` and so on, so either provider can be swapped.
 
 ## Project docs
@@ -68,6 +71,15 @@ the build fails and the previous version of the site stays live.
 - Logo: Eclipse wordmark, `src/components/brand/eclipse-logo.tsx`
 - Colors: void `#0A0A0A`, ash `#1A1A1A`, smoke `#A3A3A3`, bone `#EDEAE3`, accent rust `#C4622D`
 - To change the accent, edit `--color-accent` in `src/app/globals.css`.
+- The look is a dark room lit by an eclipse: warm light behind the page, frosted glass
+  on top of it. The store and the admin share one set of classes in `globals.css`:
+  `.glass` (header, cart, menus), `.panel` (cards), `.well` (behind product pictures),
+  `.btn` with `.btn-accent` or `.btn-glass`, `.chip` (things you pick from a set),
+  `.tag` (small facts), `.input`, `.notice`. Buttons are pills. Use these before
+  writing new styles, so the two halves keep matching.
+- Type: Anton for headlines, Archivo for everything else. Mono only for codes and
+  order numbers.
+- Emails follow the same look, in `src/lib/email/templates.ts`.
 
 ## Build status
 
@@ -75,7 +87,7 @@ the build fails and the previous version of the site stays live.
 - [x] 2. Homepage, product page and cart designs
 - [x] 3. Project scaffold
 - [x] 4. Database schema and first migration
-- [ ] 5. Storefront and cart (homepage, category pages, product page and help and policy pages are up with sample products from `src/lib/catalog.ts`; cart and database-backed catalog still to do)
-- [ ] 6. Checkout and payments
-- [ ] 7. Admin panel
+- [x] 5. Storefront and cart
+- [x] 6. Checkout and payments (Square), discount codes
+- [x] 7. Admin panel: orders, customers, inbox, campaigns and automatic emails, discounts, sales, products, categories
 - [ ] 8. Fulfillment module

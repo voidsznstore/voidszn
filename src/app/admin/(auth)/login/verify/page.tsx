@@ -14,7 +14,7 @@ export default function VerifyPage() {
       <VerifyForm />
       <Link
         href="/admin/login"
-        className="self-center text-sm text-smoke underline underline-offset-4 hover:text-bone"
+        className="self-center text-sm text-smoke link"
       >
         Start over
       </Link>

@@ -1,63 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { ProductArt } from "@/components/product/product-art";
 import {
   MAX_QUANTITY,
   lineKey,
   removeFromCart,
-  removeUnavailable,
+  setDiscountCode,
   setQuantity,
   useCart,
+  useDiscountCode,
 } from "@/lib/cart-store";
-import type { CartArt, CartView } from "@/lib/cart-view";
+import type { CartArt } from "@/lib/cart-view";
 import { formatMoney } from "@/lib/money";
 import { siteConfig } from "@/lib/site-config";
 import { useCartUi } from "./cart-provider";
+import { useCartView } from "./use-cart-view";
 
-/**
- * Asks the server what to show for the lines in the cart: names, prices and
- * pictures. Only runs while the cart is open, and only when the set of products
- * in it changes; quantity changes don't need a new answer.
- */
-function useCartView(keys: string, isOpen: boolean): CartView | null {
-  const [answer, setAnswer] = useState<{ keys: string; view: CartView } | null>(null);
-
-  useEffect(() => {
-    if (!isOpen || keys === "[]") return;
-    const controller = new AbortController();
-
-    (async () => {
-      try {
-        const lines = (JSON.parse(keys) as [string, string, string][]).map(
-          ([slug, color, size]) => ({ slug, color, size }),
-        );
-        const response = await fetch("/api/cart", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lines }),
-          signal: controller.signal,
-        });
-        if (!response.ok) return;
-        const view = (await response.json()) as CartView;
-        setAnswer({ keys, view });
-        removeUnavailable(view.unavailable);
-      } catch {
-        // A failed lookup leaves the last answer on screen. Checkout still works.
-      }
-    })();
-
-    return () => controller.abort();
-  }, [keys, isOpen]);
-
-  // The last answer stays up while a newer one loads, so the cart never blanks.
-  return answer?.view ?? null;
-}
-
-function Thumb({ art, className }: { art: CartArt; className: string }) {
+export function CartThumb({ art, className }: { art: CartArt; className: string }) {
   return (
-    <span className={`relative block flex-none overflow-hidden bg-well ${className}`}>
+    <span className={`well relative block flex-none overflow-hidden !rounded-field ${className}`}>
       <ProductArt
         image={art.image}
         label=""
@@ -73,6 +36,7 @@ function Thumb({ art, className }: { art: CartArt; className: string }) {
 export function CartDrawer() {
   const { isOpen, closeCart } = useCartUi();
   const { lines, count } = useCart();
+  const savedCode = useDiscountCode();
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   // A native dialog gives focus trapping, Escape to close and a backdrop for free.
@@ -105,16 +69,14 @@ export function CartDrawer() {
         if (event.target === dialogRef.current) closeCart();
       }}
       aria-label="Cart"
-      className="m-0 ml-auto h-dvh max-h-none w-full max-w-[30rem] border-l border-line bg-void p-0 text-bone backdrop:bg-black/70"
+      className="glass glass-deep my-2 ml-auto mr-2 h-[calc(100dvh-1rem)] max-h-none w-[calc(100vw-1rem)] max-w-[28rem] rounded-[1.75rem] p-0 text-bone backdrop:bg-black/60 backdrop:backdrop-blur-sm sm:my-3 sm:mr-3 sm:h-[calc(100dvh-1.5rem)]"
     >
       <div className="flex h-full flex-col">
-        <div className="flex min-h-[4.25rem] items-center justify-between border-b border-line px-6">
-          <h2 className="display text-[1.75rem] text-white">Your cart ({count})</h2>
-          <button
-            type="button"
-            onClick={closeCart}
-            className="inline-flex min-h-11 items-center text-sm font-semibold underline underline-offset-4 hover:text-white"
-          >
+        <div className="flex h-[4.5rem] flex-none items-center justify-between border-b border-line pl-6 pr-3.5">
+          <h2 className="display text-[1.75rem] text-white">
+            Your cart <span className="num text-smoke">({count})</span>
+          </h2>
+          <button type="button" onClick={closeCart} className="btn btn-glass btn-sm">
             Close
           </button>
         </div>
@@ -142,9 +104,9 @@ export function CartDrawer() {
                         className="flex-none"
                       >
                         {item ? (
-                          <Thumb art={item} className="h-[6.875rem] w-[5.5rem]" />
+                          <CartThumb art={item} className="h-[6.875rem] w-[5.5rem]" />
                         ) : (
-                          <span className="block h-[6.875rem] w-[5.5rem] bg-well" />
+                          <span className="well block h-[6.875rem] w-[5.5rem] !rounded-field" />
                         )}
                       </Link>
 
@@ -157,28 +119,28 @@ export function CartDrawer() {
                           >
                             {name}
                           </Link>
-                          <span className="font-mono text-sm">
+                          <span className="num text-[0.9375rem] font-semibold text-white">
                             {item ? formatMoney(item.unitPriceCents * line.quantity) : ""}
                           </span>
                         </div>
-                        <p className="label text-xs text-smoke">
-                          {line.color} / {line.size}
+                        <p className="text-sm text-smoke">
+                          {line.color}, {line.size}
                         </p>
 
                         <div className="mt-auto flex items-center justify-between">
-                          <div className="flex items-center border border-line-strong">
+                          <div className="flex items-center rounded-full border border-line-strong bg-white/[0.04]">
                             <button
                               type="button"
                               aria-label={`Decrease quantity of ${name}`}
                               disabled={line.quantity <= 1}
                               onClick={() => setQuantity(key, line.quantity - 1)}
-                              className="h-11 w-11 text-lg disabled:text-line-strong"
+                              className="h-11 w-11 rounded-full text-lg hover:bg-white/10 disabled:text-line-strong disabled:hover:bg-transparent"
                             >
-                              -
+                              −
                             </button>
                             <span
                               aria-live="polite"
-                              className="min-w-7 text-center font-mono text-sm"
+                              className="num min-w-7 text-center text-sm font-semibold"
                             >
                               {line.quantity}
                             </span>
@@ -187,7 +149,7 @@ export function CartDrawer() {
                               aria-label={`Increase quantity of ${name}`}
                               disabled={line.quantity >= MAX_QUANTITY}
                               onClick={() => setQuantity(key, line.quantity + 1)}
-                              className="h-11 w-11 text-lg disabled:text-line-strong"
+                              className="h-11 w-11 rounded-full text-lg hover:bg-white/10 disabled:text-line-strong disabled:hover:bg-transparent"
                             >
                               +
                             </button>
@@ -196,7 +158,7 @@ export function CartDrawer() {
                             type="button"
                             onClick={() => removeFromCart(key)}
                             aria-label={`Remove ${name} from cart`}
-                            className="inline-flex min-h-11 items-center text-[0.8125rem] text-smoke underline underline-offset-4 hover:text-bone"
+                            className="link inline-flex min-h-11 items-center text-[0.8125rem] text-smoke"
                           >
                             Remove
                           </button>
@@ -209,13 +171,13 @@ export function CartDrawer() {
 
               {suggestions.length > 0 ? (
                 <div className="flex flex-col gap-3 py-5">
-                  <h3 className="label text-xs text-smoke">You may also like</h3>
+                  <h3 className="label text-smoke">You may also like</h3>
                   {suggestions.map((product) => (
                     <div key={product.slug} className="flex items-center gap-3.5">
-                      <Thumb art={product} className="h-[4.375rem] w-14" />
+                      <CartThumb art={product} className="h-[4.375rem] w-14" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold">{product.name}</p>
-                        <p className="font-mono text-[0.8125rem] text-smoke">
+                        <p className="num text-[0.8125rem] text-smoke">
                           {formatMoney(product.priceCents)}
                         </p>
                       </div>
@@ -223,7 +185,7 @@ export function CartDrawer() {
                         href={`/products/${product.slug}`}
                         onClick={closeCart}
                         aria-label={`View ${product.name}`}
-                        className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center border border-line-strong text-sm font-semibold hover:border-bone"
+                        className="btn btn-glass btn-sm"
                       >
                         View
                       </Link>
@@ -236,22 +198,37 @@ export function CartDrawer() {
             <div className="flex flex-col gap-3 border-t border-line px-6 pb-6 pt-5">
               <div className="flex items-baseline justify-between">
                 <span className="font-semibold">Subtotal</span>
-                <span className="font-mono text-lg text-white">
+                <span className="num text-xl font-semibold text-white">
                   {isPriced ? formatMoney(subtotalCents) : "…"}
                 </span>
               </div>
-              <p className="text-[0.8125rem] text-smoke">Shipping is added at checkout.</p>
+              {savedCode ? (
+                <p className="flex flex-wrap items-center gap-2 text-[0.8125rem] text-bone-dim">
+                  <span className="tag tag-warn">{savedCode}</span>
+                  comes off at checkout.
+                  <button
+                    type="button"
+                    onClick={() => setDiscountCode(null)}
+                    className="link inline-flex min-h-8 items-center text-smoke"
+                  >
+                    Remove
+                  </button>
+                </p>
+              ) : null}
+              <p className="text-[0.8125rem] text-smoke">
+                Shipping is added at checkout{savedCode ? "" : ", where you can also enter a code"}.
+              </p>
               <Link
                 href="/checkout"
                 onClick={closeCart}
-                className="btn btn-accent min-h-[3.625rem] w-full text-[1.0625rem]"
+                className="btn btn-accent min-h-14 w-full text-[1.0625rem]"
               >
                 Checkout
               </Link>
               <p className="text-center text-[0.8125rem] text-smoke">
                 Printed to order. Damaged or wrong items are replaced or refunded within{" "}
                 {siteConfig.orders.issueWindowDays} days.{" "}
-                <Link href="/returns" onClick={closeCart} className="underline underline-offset-4">
+                <Link href="/returns" onClick={closeCart} className="link">
                   Returns policy
                 </Link>
               </p>

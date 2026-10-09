@@ -13,7 +13,10 @@ import {
 } from "@/db/queries/admin-campaigns";
 import { FormError } from "@/db/queries/admin-catalog";
 import { requireAdmin } from "@/lib/admin/session";
-import { sendCampaign, sendTest } from "@/lib/email/campaigns";
+import { findDiscountById } from "@/db/queries/discounts";
+import { codeProblem } from "@/lib/checkout/discounts";
+import { contentOf, sendCampaign, sendTest } from "@/lib/email/campaigns";
+import { hasPlaceholder } from "@/lib/email/presets";
 import { isEmailConfigured } from "@/lib/email/send";
 import { unfilledSiteConfig } from "@/lib/site-config";
 import { storagePublicUrl } from "@/lib/storage";
@@ -31,7 +34,9 @@ const schema = z
     id: z.string().uuid(),
     subject: text(150).min(1, "Give the email a subject."),
     preheader: text(150),
+    heading: text(80),
     body: text(10_000).min(1, "Write the message."),
+    discountCodeId: z.string().uuid().nullable(),
     imageUrl: z.string().url().max(500).nullable(),
     buttonLabel: text(40),
     buttonUrl: webLink,
@@ -64,7 +69,12 @@ async function save(input: unknown): Promise<{ error: string } | Saved> {
   if (content.imageUrl && !(storage && content.imageUrl.startsWith(`${storage}/`))) {
     return { error: "Add the photo again using the photo button." };
   }
-  const wasDraft = await saveCampaign(getDb(), admin.email, id, content);
+  const db = getDb();
+  // The code has to exist. Whether it can still be used is checked when sending.
+  if (content.discountCodeId && !(await findDiscountById(db, content.discountCodeId))) {
+    return { error: "That discount code no longer exists. Pick another, or none." };
+  }
+  const wasDraft = await saveCampaign(db, admin.email, id, content);
   return { id, content, email: admin.email, wasDraft };
 }
 
@@ -83,7 +93,7 @@ export async function sendTestAction(input: unknown): Promise<CampaignResult> {
   if (!saved.wasDraft) return { error: ALREADY_SENT };
   if (!isEmailConfigured()) return { error: "Email sending isn't set up yet." };
 
-  const result = await sendTest(saved.content, saved.email);
+  const result = await sendTest(await contentOf({ ...saved.content, imageUrl: saved.content.imageUrl }), saved.email);
   refresh();
   return result.ok
     ? { id: saved.id, done: `Draft saved. A test is on its way to ${saved.email}.` }
@@ -109,6 +119,20 @@ export async function sendCampaignAction(input: unknown): Promise<CampaignResult
       error:
         "The draft was saved, but it can't be sent yet. Marketing emails must show your business mailing address, and that hasn't been filled in.",
     };
+  }
+
+  const { subject, preheader, heading, body, discountCodeId } = saved.content;
+  if ([subject, preheader, heading, body].some(hasPlaceholder)) {
+    return { error: "The draft was saved, but it still has a part in [BRACKETS] to fill in." };
+  }
+  if (discountCodeId) {
+    const code = await findDiscountById(getDb(), discountCodeId);
+    const problem = code ? codeProblem(code) : "That code no longer exists.";
+    if (problem) {
+      return {
+        error: `The draft was saved, but its discount code can't be used: ${problem} Pick another code, or none.`,
+      };
+    }
   }
 
   try {

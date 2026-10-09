@@ -24,7 +24,7 @@ export default function CustomerPage({ params }: Props) {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const panel = "flex flex-col gap-4 border border-line bg-ash-soft p-5";
+const panel = "flex flex-col gap-4 panel p-5";
 const heading = "text-lg font-semibold text-white";
 
 async function Customer({ params }: Pick<Props, "params">) {
@@ -44,7 +44,7 @@ async function Customer({ params }: Pick<Props, "params">) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
-        <Link href="/admin/customers" className="text-sm text-smoke underline underline-offset-4 hover:text-bone">
+        <Link href="/admin/customers" className="text-sm text-smoke link">
           All customers
         </Link>
         <h1 className="display text-4xl text-white">{customer.name ?? customer.email}</h1>
@@ -61,8 +61,8 @@ async function Customer({ params }: Pick<Props, "params">) {
               ["Spent", formatMoney(spentCents)],
               ["Last order", orders[0] ? formatDate(orders[0].createdAt) : "None"],
             ].map(([label, value]) => (
-              <li key={label} className="flex flex-col gap-1 border border-line bg-ash-soft p-4">
-                <span className="label text-xs text-smoke">{label}</span>
+              <li key={label} className="flex flex-col gap-1 panel p-4">
+                <span className="label text-smoke">{label}</span>
                 <span className="font-mono text-xl text-white">{value}</span>
               </li>
             ))}
@@ -71,14 +71,14 @@ async function Customer({ params }: Pick<Props, "params">) {
           <section className={panel}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className={heading}>Orders</h2>
-              <Link href={`/admin/orders/new?customer=${customer.id}`} className="btn btn-outline min-h-11 px-5">
+              <Link href={`/admin/orders/new?customer=${customer.id}`} className="btn btn-glass min-h-11 px-5">
                 Add an order for them
               </Link>
             </div>
             {orders.length === 0 ? (
               <p className="text-bone-dim">No orders yet.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="panel overflow-x-auto px-5 py-1">
                 <table className="w-full min-w-[30rem] border-collapse text-left text-sm">
                   <thead>
                     <tr className="label border-b border-line text-xs text-smoke">
@@ -101,7 +101,7 @@ async function Customer({ params }: Pick<Props, "params">) {
                         </td>
                         <td className="py-2 pr-4 text-bone-dim">{formatDateTime(order.createdAt)}</td>
                         <td className="py-2 pr-4">
-                          <span className="label text-xs">{statusLabel(order.status)}</span>
+                          <span className="label">{statusLabel(order.status)}</span>
                         </td>
                         <td className="py-2 font-mono">
                           {formatMoney(order.totalCents)}
@@ -124,7 +124,7 @@ async function Customer({ params }: Pick<Props, "params">) {
           <section className={panel}>
             <h2 className={heading}>Details</h2>
             <p className="text-bone-dim">
-              <a href={`mailto:${customer.email}`} className="underline underline-offset-4">
+              <a href={`mailto:${customer.email}`} className="link">
                 {customer.email}
               </a>
             </p>
@@ -132,13 +132,13 @@ async function Customer({ params }: Pick<Props, "params">) {
               <p className="flex flex-wrap gap-x-6 text-sm">
                 <Link
                   href={`/admin/inbox/new?to=${encodeURIComponent(customer.email)}`}
-                  className="inline-flex min-h-11 items-center underline underline-offset-4"
+                  className="inline-flex min-h-11 items-center link"
                 >
                   Write to them
                 </Link>
                 <Link
                   href={`/admin/inbox?q=${encodeURIComponent(customer.email)}`}
-                  className="inline-flex min-h-11 items-center underline underline-offset-4"
+                  className="inline-flex min-h-11 items-center link"
                 >
                   Emails from them
                 </Link>

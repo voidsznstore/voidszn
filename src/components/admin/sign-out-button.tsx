@@ -26,7 +26,7 @@ export function SignOutButton({ className = "" }: { className?: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex min-h-11 items-center text-sm text-smoke underline underline-offset-4 hover:text-bone disabled:opacity-60"
+        className="inline-flex min-h-11 items-center text-sm text-smoke link"
       >
         Sign out
       </button>

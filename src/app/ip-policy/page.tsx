@@ -68,7 +68,7 @@ export default function IpPolicyPage() {
       <p>
         {legalName}
         <br />
-        {mailingAddress}
+        <span className="fine-print">{mailingAddress}</span>
         <br />
         <Email address={legalEmail} />
       </p>

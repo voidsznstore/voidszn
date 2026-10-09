@@ -28,7 +28,7 @@ export default function ConfirmationPage({ searchParams }: PageProps<"/order/con
     <>
       <SiteHeader />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-24 pt-12 sm:px-10">
-        <Suspense fallback={<p className="text-bone-dim">Loading your order…</p>}>
+        <Suspense fallback={<p className="text-center text-bone-dim">Loading your order…</p>}>
           <Confirmation searchParams={searchParams} />
         </Suspense>
       </main>
@@ -88,18 +88,22 @@ async function Confirmation({
     <>
       <OrderPlaced />
 
-      <header className="flex flex-col gap-4 border-b border-line pb-8">
-        <p className="label text-xs text-accent">Order placed</p>
-        <h1 className="display text-[clamp(2.75rem,7vw,4.5rem)] text-white">Thank you</h1>
-        <p className="text-lg text-bone-dim">Your order is in. Updates go to {order.email}.</p>
+      <header className="flex flex-col items-center gap-4 pb-9 text-center">
+        <span className="tag tag-good">Order placed</span>
+        <h1 className="display text-[clamp(2.75rem,7vw,4.5rem)] text-white [text-shadow:0_0_42px_rgb(237_234_227/0.18)]">
+          Thank you
+        </h1>
+        <p className="max-w-xl text-balance text-lg text-bone-dim">
+          Your order is in. Updates go to {order.email}.
+        </p>
         {orderNumber ? (
-          <p className="label text-sm text-bone">
-            Order number <span className="font-mono text-white">{orderNumber}</span>
+          <p className="text-sm text-smoke">
+            Order number <span className="font-mono text-base text-white">{orderNumber}</span>
           </p>
         ) : null}
       </header>
 
-      <section aria-label="Order summary" className="border-b border-line py-8">
+      <section aria-label="Order summary" className="panel px-5 py-6 sm:px-7">
         <ul className="flex flex-col gap-4">
           {order.items.map((item) => (
             <li
@@ -111,11 +115,11 @@ async function Confirmation({
                   {item.productName}
                   {item.quantity > 1 ? ` × ${item.quantity}` : ""}
                 </p>
-                <p className="label text-xs text-smoke">
-                  {item.colorName} / {item.size}
+                <p className="text-sm text-smoke">
+                  {item.colorName}, {item.size}
                 </p>
               </div>
-              <span className="font-mono text-sm">
+              <span className="num text-[0.9375rem] font-semibold">
                 {formatMoney(item.unitPriceCents * item.quantity)}
               </span>
             </li>
@@ -130,7 +134,7 @@ async function Confirmation({
           {order.taxCents > 0 ? <Row label="Tax" value={formatMoney(order.taxCents)} /> : null}
           <div className="flex justify-between pt-2 text-base font-semibold text-white">
             <dt>Total</dt>
-            <dd className="font-mono">{formatMoney(order.totalCents)}</dd>
+            <dd className="num">{formatMoney(order.totalCents)}</dd>
           </div>
         </dl>
       </section>
@@ -166,7 +170,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between text-bone-dim">
       <dt>{label}</dt>
-      <dd className="font-mono">{value}</dd>
+      <dd className="num">{value}</dd>
     </div>
   );
 }
@@ -181,9 +185,9 @@ function Message({
   action: { href: string; label: string };
 }) {
   return (
-    <div className="flex flex-col items-start gap-5">
+    <div className="flex flex-col items-center gap-5 pt-8 text-center">
       <h1 className="display text-[clamp(2.5rem,6vw,4rem)] text-white">{title}</h1>
-      <p className="text-bone-dim">{children}</p>
+      <p className="max-w-xl text-balance text-bone-dim">{children}</p>
       <Link href={action.href} className="btn btn-accent">
         {action.label}
       </Link>

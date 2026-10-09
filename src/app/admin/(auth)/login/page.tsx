@@ -26,7 +26,7 @@ async function Notice({ searchParams }: Pick<PageProps<"/admin/login">, "searchP
       : null;
   if (!message) return null;
   return (
-    <p className="border border-line bg-ash-soft px-4 py-3 text-center text-sm text-bone-dim">
+    <p className="panel px-4 py-3 text-center text-sm text-bone-dim">
       {message}
     </p>
   );

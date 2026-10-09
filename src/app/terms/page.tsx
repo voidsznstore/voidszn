@@ -114,7 +114,7 @@ export default function TermsPage() {
       <p>
         {legalName}
         <br />
-        {mailingAddress}
+        <span className="fine-print">{mailingAddress}</span>
         <br />
         <Email address={supportEmail} />
       </p>

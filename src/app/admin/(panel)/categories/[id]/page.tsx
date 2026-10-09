@@ -32,7 +32,7 @@ async function Category({ params }: Pick<PageProps<"/admin/categories/[id]">, "p
   return (
     <div className="flex flex-col gap-12">
       <header className="flex flex-col gap-2">
-        <Link href="/admin/categories" className="text-sm text-smoke underline underline-offset-4 hover:text-bone">
+        <Link href="/admin/categories" className="text-sm text-smoke link">
           All categories
         </Link>
         <h1 className="display text-4xl text-white">{category.name}</h1>
@@ -41,7 +41,7 @@ async function Category({ params }: Pick<PageProps<"/admin/categories/[id]">, "p
           <Link
             href={`/collections/${category.slug}`}
             prefetch={false}
-            className="underline underline-offset-4"
+            className="link"
           >
             /collections/{category.slug}
           </Link>

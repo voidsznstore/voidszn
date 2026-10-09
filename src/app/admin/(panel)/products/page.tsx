@@ -61,7 +61,7 @@ async function Products({ searchParams }: Pick<Props, "searchParams">) {
   return (
     <div className="flex flex-col gap-6">
       {one(params.deleted) ? (
-        <p className="border border-line bg-ash-soft px-4 py-3 text-sm">Product deleted.</p>
+        <p className="panel px-4 py-3 text-sm">Product deleted.</p>
       ) : null}
 
       {/* A plain form: choosing filters and pressing Apply reloads the list. The key
@@ -71,13 +71,13 @@ async function Products({ searchParams }: Pick<Props, "searchParams">) {
         className="flex flex-wrap items-end gap-3"
       >
         <div className="flex min-w-48 flex-1 flex-col gap-1.5">
-          <label htmlFor="filter-q" className="label text-xs text-smoke">
+          <label htmlFor="filter-q" className="label text-smoke">
             Search
           </label>
           <input id="filter-q" name="q" type="search" defaultValue={q} placeholder="Name" className="input" />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="filter-category" className="label text-xs text-smoke">
+          <label htmlFor="filter-category" className="label text-smoke">
             Category
           </label>
           <select id="filter-category" name="category" defaultValue={category ?? ""} className={selectClass}>
@@ -103,7 +103,7 @@ async function Products({ searchParams }: Pick<Props, "searchParams">) {
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="filter-status" className="label text-xs text-smoke">
+          <label htmlFor="filter-status" className="label text-smoke">
             Status
           </label>
           <select id="filter-status" name="status" defaultValue={status ?? ""} className={selectClass}>
@@ -113,7 +113,7 @@ async function Products({ searchParams }: Pick<Props, "searchParams">) {
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="filter-sort" className="label text-xs text-smoke">
+          <label htmlFor="filter-sort" className="label text-smoke">
             Sort by
           </label>
           <select id="filter-sort" name="sort" defaultValue={sort} className={selectClass}>
@@ -124,26 +124,26 @@ async function Products({ searchParams }: Pick<Props, "searchParams">) {
             ))}
           </select>
         </div>
-        <button type="submit" className="btn btn-outline min-h-[2.875rem] px-5">
+        <button type="submit" className="btn btn-glass min-h-[2.875rem] px-5">
           Apply
         </button>
         {isFiltered ? (
-          <Link href="/admin/products" className="inline-flex min-h-[2.875rem] items-center text-sm underline underline-offset-4">
+          <Link href="/admin/products" className="inline-flex min-h-[2.875rem] items-center text-sm link">
             Clear
           </Link>
         ) : null}
       </form>
 
-      <p className="label text-xs text-smoke">
+      <p className="label text-smoke">
         {products.length} {products.length === 1 ? "product" : "products"}
       </p>
 
       {products.length === 0 ? (
-        <p className="border border-line bg-ash-soft px-5 py-10 text-center text-bone-dim">
+        <p className="panel px-5 py-10 text-center text-bone-dim">
           {isFiltered ? "Nothing matches those filters." : "No products yet. Add your first one."}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="panel overflow-x-auto px-5 py-1">
           <table className="w-full min-w-[44rem] border-collapse text-left text-sm">
             <thead>
               <tr className="label border-b border-line text-xs text-smoke">
@@ -156,11 +156,11 @@ async function Products({ searchParams }: Pick<Props, "searchParams">) {
             </thead>
             <tbody>
               {products.map((product) => (
-                <tr key={product.id} className="border-b border-line hover:bg-ash-soft">
+                <tr key={product.id} className="border-b border-line hover:bg-white/[0.04]">
                   <td className="py-2 pr-4">
                     <Link href={`/admin/products/${product.id}`} className="flex min-h-14 items-center gap-3">
                       <span
-                        className="relative block h-12 w-10 flex-none overflow-hidden bg-well"
+                        className="relative block h-12 w-10 flex-none well overflow-hidden !rounded-[0.5rem]"
                         style={product.thumbnail ? undefined : { background: product.swatch ?? undefined }}
                       >
                         {product.thumbnail ? (
@@ -176,7 +176,7 @@ async function Products({ searchParams }: Pick<Props, "searchParams">) {
                   <td className="py-2 pr-4 text-bone-dim">{product.interests.join(", ")}</td>
                   <td className="py-2 pr-4 font-mono">{formatMoney(product.priceCents)}</td>
                   <td className="py-2">
-                    <span className={`label text-xs ${product.isActive ? "text-bone" : "text-smoke"}`}>
+                    <span className={`label ${product.isActive ? "text-bone" : "text-smoke"}`}>
                       {product.isActive ? "On sale" : "Draft"}
                     </span>
                   </td>

@@ -16,7 +16,7 @@ type Props = PageProps<"/admin/orders/new">;
 export default function NewOrderPage({ searchParams }: Props) {
   return (
     <>
-      <Link href="/admin/orders" className="text-sm text-smoke underline underline-offset-4 hover:text-bone">
+      <Link href="/admin/orders" className="text-sm text-smoke link">
         All orders
       </Link>
       <PageHeader title="Add order" />

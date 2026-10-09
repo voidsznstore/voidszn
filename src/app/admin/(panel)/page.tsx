@@ -38,10 +38,10 @@ async function Overview() {
           <li key={stat.label}>
             <Link
               href={stat.href}
-              className="flex flex-col gap-2 border border-line bg-ash-soft p-5 hover:border-line-strong"
+              className="flex flex-col gap-2 panel p-5 transition-colors hover:border-line-strong"
             >
-              <span className="label text-xs text-smoke">{stat.label}</span>
-              <span className="font-mono text-3xl text-white">{stat.value}</span>
+              <span className="label text-smoke">{stat.label}</span>
+              <span className="num text-3xl font-semibold text-white">{stat.value}</span>
             </Link>
           </li>
         ))}
@@ -57,11 +57,11 @@ async function Overview() {
               <li key={order.orderNumber} className="border-b border-line">
                 <Link
                   href={`/admin/orders/${order.orderNumber}`}
-                  className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-1 py-3 hover:bg-ash-soft"
+                  className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-1 py-3 hover:bg-white/[0.04]"
                 >
                   <span className="font-mono text-sm text-white">{order.orderNumber}</span>
                   <span className="min-w-0 flex-1 truncate text-bone-dim">{order.shippingName}</span>
-                  <span className="label text-xs text-smoke">{order.status.replace("_", " ")}</span>
+                  <span className="label text-smoke">{order.status.replace("_", " ")}</span>
                   <span className="font-mono text-sm">{formatMoney(order.totalCents)}</span>
                 </Link>
               </li>

@@ -70,9 +70,7 @@ async function Customers({ searchParams }: Pick<Props, "searchParams">) {
             key={key}
             href={tabHref(key)}
             aria-current={key === view ? "page" : undefined}
-            className={`inline-flex min-h-11 items-center gap-2 border px-4 text-sm font-semibold ${
-              key === view ? "border-bone bg-bone text-void" : "border-line-strong hover:border-bone"
-            }`}
+            className="chip"
           >
             {CUSTOMER_VIEWS[key]}
             <span className="font-mono text-xs">{counts[key]}</span>
@@ -86,7 +84,7 @@ async function Customers({ searchParams }: Pick<Props, "searchParams">) {
       <form key={[view, q, sort].join("|")} className="flex flex-wrap items-end gap-3">
         {view !== "all" ? <input type="hidden" name="view" value={view} /> : null}
         <div className="flex min-w-48 flex-1 flex-col gap-1.5">
-          <label htmlFor="filter-q" className="label text-xs text-smoke">
+          <label htmlFor="filter-q" className="label text-smoke">
             Search
           </label>
           <input
@@ -99,7 +97,7 @@ async function Customers({ searchParams }: Pick<Props, "searchParams">) {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="filter-sort" className="label text-xs text-smoke">
+          <label htmlFor="filter-sort" className="label text-smoke">
             Sort by
           </label>
           <select id="filter-sort" name="sort" defaultValue={sort} className="input w-auto min-w-40">
@@ -110,13 +108,13 @@ async function Customers({ searchParams }: Pick<Props, "searchParams">) {
             ))}
           </select>
         </div>
-        <button type="submit" className="btn btn-outline min-h-[2.875rem] px-5">
+        <button type="submit" className="btn btn-glass min-h-[2.875rem] px-5">
           Apply
         </button>
         {q ? (
           <Link
             href={view === "all" ? "/admin/customers" : `/admin/customers?view=${view}`}
-            className="inline-flex min-h-[2.875rem] items-center text-sm underline underline-offset-4"
+            className="inline-flex min-h-[2.875rem] items-center text-sm link"
           >
             Clear
           </Link>
@@ -124,13 +122,13 @@ async function Customers({ searchParams }: Pick<Props, "searchParams">) {
       </form>
 
       {customers.length === 0 ? (
-        <p className="border border-line bg-ash-soft px-5 py-10 text-center text-bone-dim">
+        <p className="panel px-5 py-10 text-center text-bone-dim">
           {q || view !== "all"
             ? "No customers match."
             : "No customers yet. They appear here when someone orders, or when you add one."}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="panel overflow-x-auto px-5 py-1">
           <table className="w-full min-w-[46rem] border-collapse text-left text-sm">
             <thead>
               <tr className="label border-b border-line text-xs text-smoke">
@@ -144,7 +142,7 @@ async function Customers({ searchParams }: Pick<Props, "searchParams">) {
             </thead>
             <tbody>
               {customers.map((customer) => (
-                <tr key={customer.id} className="border-b border-line hover:bg-ash-soft">
+                <tr key={customer.id} className="border-b border-line hover:bg-white/[0.04]">
                   <td className="py-2 pr-4">
                     <Link
                       href={`/admin/customers/${customer.id}`}
@@ -157,7 +155,7 @@ async function Customers({ searchParams }: Pick<Props, "searchParams">) {
                   <td className="py-2 pr-4 text-bone-dim">
                     {formatDate(customer.createdAt)}
                     {customer.isNew ? (
-                      <span className="label ml-2 border border-line-strong px-2 py-1 text-[0.6875rem]">New</span>
+                      <span className="tag ml-2">New</span>
                     ) : null}
                   </td>
                   <td className="py-2 pr-4 font-mono">{customer.orders}</td>

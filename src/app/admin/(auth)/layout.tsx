@@ -10,11 +10,16 @@ export const metadata: Metadata = {
 export default function AuthLayout({ children }: LayoutProps<"/admin">) {
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-4 py-16">
-      <div className="flex w-full max-w-sm flex-col gap-8">
-        <Link href="/" prefetch={false} aria-label="VOIDSZN home" className="self-center">
+      <div className="flex w-full max-w-md flex-col gap-7">
+        <Link
+          href="/"
+          prefetch={false}
+          aria-label="VOIDSZN home"
+          className="inline-flex h-14 items-center self-center px-4"
+        >
           <EclipseLogo size={30} />
         </Link>
-        {children}
+        <div className="glass flex flex-col gap-7 rounded-[1.75rem] px-6 py-8 sm:px-8">{children}</div>
       </div>
     </main>
   );

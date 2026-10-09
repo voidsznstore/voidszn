@@ -14,6 +14,7 @@ import {
   releaseSends,
 } from "@/db/queries/admin-campaigns";
 import { siteConfig } from "@/lib/site-config";
+import { emailDiscountAsSent, usableEmailDiscount } from "./automation";
 import { type Email, sendBatch, sendEmail } from "./send";
 import { type CampaignContent, campaignEmail } from "./templates";
 
@@ -35,6 +36,41 @@ function emailFor(content: CampaignContent, to: string, token: string, key: stri
       "List-Unsubscribe": `<${siteConfig.url}/api/unsubscribe/${token}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
+  };
+}
+
+type SavedCampaign = {
+  subject: string;
+  preheader: string | null;
+  heading: string | null;
+  body: string;
+  imageUrl: string | null;
+  buttonLabel: string | null;
+  buttonUrl: string | null;
+  discountCodeId: string | null;
+};
+
+/**
+ * A saved campaign as the email template wants it, with its discount code
+ * looked up. A code that can no longer be used is left out of the email.
+ */
+export async function contentOf(
+  campaign: SavedCampaign,
+  /** "sent" shows the code whether or not it still works, for looking back at what went out. */
+  when: "now" | "sent" = "now",
+): Promise<CampaignContent> {
+  return {
+    subject: campaign.subject,
+    preheader: campaign.preheader ?? "",
+    heading: campaign.heading,
+    body: campaign.body,
+    imageUrl: campaign.imageUrl,
+    buttonLabel: campaign.buttonLabel ?? "",
+    buttonUrl: campaign.buttonUrl ?? "",
+    discount:
+      when === "sent"
+        ? await emailDiscountAsSent(getDb(), campaign.discountCodeId)
+        : await usableEmailDiscount(getDb(), campaign.discountCodeId),
   };
 }
 
@@ -71,14 +107,7 @@ export async function sendCampaign(id: string): Promise<SendProgress> {
   const { campaign } = detail;
   if (campaign.status === "DRAFT") return { ...detail.sends };
 
-  const content: CampaignContent = {
-    subject: campaign.subject,
-    preheader: campaign.preheader ?? "",
-    body: campaign.body,
-    imageUrl: campaign.imageUrl,
-    buttonLabel: campaign.buttonLabel ?? "",
-    buttonUrl: campaign.buttonUrl ?? "",
-  };
+  const content = await contentOf(campaign);
   const build = (row: ClaimedSend) => emailFor(content, row.email, row.token, `campaign/${id}/${row.id}`);
 
   const started = Date.now();

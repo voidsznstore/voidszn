@@ -53,24 +53,31 @@ export function ProductView({ product, typeName }: ProductViewProps) {
     openCart();
   }
 
+  const wasCents =
+    product.compareAtPriceCents && product.compareAtPriceCents > priceCents
+      ? product.compareAtPriceCents
+      : null;
+
   return (
     <div className="grid items-start gap-x-14 gap-y-10 lg:grid-cols-[1.1fr_0.9fr]">
       {/* Gallery */}
-      <div className="flex flex-col gap-3">
-        <div className="relative aspect-[4/5] overflow-hidden bg-well">
-          <ProductArt
-            image={hasPhotos ? photos[current] : null}
-            label={`${product.name} in ${color.name}${hasPhotos ? "" : `, ${VIEWS[current]}`}`}
-            color={color}
-            graphic={product.graphic}
-            view={hasPhotos ? undefined : VIEWS[current]}
-            sizes={MAIN_SIZES}
-            padding="p-10 sm:p-16"
-            priority
-          />
+      <div className="flex flex-col gap-5">
+        <div className="corners mx-3 mt-3 sm:mx-0 sm:mt-0">
+          <div className="well relative aspect-[4/5] overflow-hidden">
+            <ProductArt
+              image={hasPhotos ? photos[current] : null}
+              label={`${product.name} in ${color.name}${hasPhotos ? "" : `, ${VIEWS[current]}`}`}
+              color={color}
+              graphic={product.graphic}
+              view={hasPhotos ? undefined : VIEWS[current]}
+              sizes={MAIN_SIZES}
+              padding="p-10 sm:p-16"
+              priority
+            />
+          </div>
         </div>
         {shotCount > 1 ? (
-          <div className="grid grid-cols-4 gap-3">
+          <div className="mx-3 grid grid-cols-5 gap-2.5 sm:mx-0">
             {Array.from({ length: shotCount }, (_, index) => (
               <button
                 key={hasPhotos ? photos[index].url : VIEWS[index]}
@@ -78,8 +85,10 @@ export function ProductView({ product, typeName }: ProductViewProps) {
                 aria-label={hasPhotos ? `Show photo ${index + 1}` : `Show ${VIEWS[index]}`}
                 aria-pressed={current === index}
                 onClick={() => setShot(index)}
-                className={`relative aspect-square overflow-hidden bg-well ${
-                  current === index ? "outline outline-1 outline-bone" : "hover:bg-well-hover"
+                className={`well relative aspect-square overflow-hidden !rounded-field transition-shadow ${
+                  current === index
+                    ? "shadow-[inset_0_0_0_2px_var(--color-bone)]"
+                    : "opacity-70 hover:opacity-100"
                 }`}
               >
                 <ProductArt
@@ -89,7 +98,7 @@ export function ProductView({ product, typeName }: ProductViewProps) {
                   graphic={product.graphic}
                   view={hasPhotos ? undefined : VIEWS[index]}
                   sizes={THUMB_SIZES}
-                  padding="p-3"
+                  padding="p-2.5"
                 />
               </button>
             ))}
@@ -98,20 +107,33 @@ export function ProductView({ product, typeName }: ProductViewProps) {
       </div>
 
       {/* Details */}
-      <div className="flex flex-col gap-7">
+      <div className="flex flex-col gap-7 lg:sticky lg:top-28">
         <div className="flex flex-col gap-3">
-          <p className="label text-accent">{typeName}</p>
+          <p className="label text-ember">{typeName}</p>
           <h1 className="display text-[clamp(2.5rem,5vw,3.75rem)] text-white">{product.name}</h1>
-          <p className="font-mono text-2xl text-white">
-            {sizePricingVaries && !chosenSize ? "From " : ""}
-            {formatMoney(priceCents)}
+          <p className="num flex flex-wrap items-baseline gap-x-3 text-2xl font-semibold text-white">
+            <span>
+              {sizePricingVaries && !chosenSize ? "From " : ""}
+              {formatMoney(priceCents)}
+            </span>
+            {wasCents ? (
+              <>
+                <s className="text-lg font-normal text-smoke">
+                  <span className="sr-only">Was </span>
+                  {formatMoney(wasCents)}
+                </s>
+                <span className="tag tag-accent">Sale</span>
+              </>
+            ) : null}
           </p>
-          {product.description ? <p className="text-bone-dim">{product.description}</p> : null}
+          {product.description ? (
+            <p className="max-w-prose text-bone-dim">{product.description}</p>
+          ) : null}
         </div>
 
-        <fieldset className="flex flex-col gap-3">
-          <legend className="label mb-3 text-smoke">
-            Color / <span className="text-bone">{color.name}</span>
+        <fieldset>
+          <legend className="mb-3 text-sm text-smoke">
+            Color: <span className="font-semibold text-bone">{color.name}</span>
           </legend>
           <div className="flex flex-wrap gap-3">
             {product.colors.map((option, index) => (
@@ -124,22 +146,22 @@ export function ProductView({ product, typeName }: ProductViewProps) {
                   setColorIndex(index);
                   setShot(0);
                 }}
-                className="h-11 w-11 rounded-full"
+                className="h-11 w-11 rounded-full transition-shadow"
                 style={{
                   background: option.hex,
                   boxShadow:
                     index === colorIndex
                       ? "0 0 0 3px var(--color-void), 0 0 0 5px var(--color-bone)"
-                      : "0 0 0 1px var(--color-line-strong)",
+                      : "inset 0 0 0 1px rgb(237 234 227 / 0.35)",
                 }}
               />
             ))}
           </div>
         </fieldset>
 
-        <fieldset className="flex flex-col gap-3">
-          <legend className="label mb-3 text-smoke">
-            Size / <span className="text-bone">{size ?? "Select"}</span>
+        <fieldset>
+          <legend className="mb-3 text-sm text-smoke">
+            Size: <span className="font-semibold text-bone">{size ?? "pick one"}</span>
           </legend>
           <div className="flex flex-wrap gap-2">
             {product.sizes.map((option) => (
@@ -151,90 +173,92 @@ export function ProductView({ product, typeName }: ProductViewProps) {
                   setSize(option.size);
                   setMessage(null);
                 }}
-                className={`min-h-12 min-w-[3.75rem] border px-3 font-mono text-sm transition-colors ${
-                  size === option.size
-                    ? "border-bone bg-bone text-void"
-                    : "border-line-strong text-bone hover:border-bone"
-                }`}
+                className="chip min-h-12 min-w-[3.5rem]"
               >
                 {option.size}
               </button>
             ))}
           </div>
-          <details className="text-sm">
-            <summary className="inline-flex min-h-11 cursor-pointer items-center underline underline-offset-4">
-              Size guide
-            </summary>
-            <p className="pb-2 text-bone-dim">
-              Not sure which size? See the{" "}
-              <Link href="/size-guide" className="underline underline-offset-4">
-                size guide and how to measure
-              </Link>
-              .
-            </p>
-          </details>
+          <Link href="/size-guide" className="link mt-2 inline-flex min-h-11 items-center text-sm">
+            Size guide
+          </Link>
         </fieldset>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <button
             type="button"
             onClick={handleAddToCart}
-            className="btn btn-accent min-h-[3.625rem] w-full text-[1.0625rem]"
+            className="btn btn-accent min-h-14 w-full text-[1.0625rem]"
           >
             {size ? "Add to cart" : "Select a size"}
           </button>
-          <p aria-live="polite" className="min-h-5 text-sm text-bone-dim">
+          <p aria-live="polite" className="min-h-5 text-center text-sm text-ember">
             {message}
           </p>
         </div>
 
-        <div className="flex flex-col gap-1 border border-line bg-ash-soft px-[1.125rem] py-4">
+        <div className="panel flex flex-col gap-1 px-5 py-4">
           <p className="font-semibold">Printed to order</p>
           <p className="text-[0.9375rem] text-bone-dim">{SHIPPING_NOTE}</p>
         </div>
 
         <div className="border-t border-line">
           {product.details.length > 0 ? (
-            <details open className="border-b border-line">
-              <summary className="flex min-h-[3.25rem] cursor-pointer items-center font-semibold">
-                Details
-              </summary>
-              <ul className="list-disc pb-4 pl-5 text-[0.9375rem] text-bone-dim">
+            <Fold title="Details" open>
+              <ul className="list-disc pl-5 marker:text-accent">
                 {product.details.map((detail) => (
                   <li key={detail}>{detail}</li>
                 ))}
               </ul>
-            </details>
+            </Fold>
           ) : null}
           {product.fit ? (
-            <details className="border-b border-line">
-              <summary className="flex min-h-[3.25rem] cursor-pointer items-center font-semibold">
-                Size and fit
-              </summary>
-              <p className="pb-4 text-[0.9375rem] text-bone-dim">{product.fit}</p>
-            </details>
+            <Fold title="Size and fit">
+              <p>{product.fit}</p>
+            </Fold>
           ) : null}
-          <details className="border-b border-line">
-            <summary className="flex min-h-[3.25rem] cursor-pointer items-center font-semibold">
-              Shipping and returns
-            </summary>
-            <p className="pb-4 text-[0.9375rem] text-bone-dim">
+          <Fold title="Shipping and returns">
+            <p>
               {SHIPPING_NOTE} Every item is made to order, so we can&apos;t take returns for a
               change of mind or a wrong size. If it arrives damaged, defective or wrong, tell us
               within {orders.issueWindowDays} days and we&apos;ll replace or refund it. Full
               details:{" "}
-              <Link href="/shipping" className="underline underline-offset-4">
+              <Link href="/shipping" className="link">
                 shipping
               </Link>{" "}
               and{" "}
-              <Link href="/returns" className="underline underline-offset-4">
+              <Link href="/returns" className="link">
                 returns
               </Link>
               .
             </p>
-          </details>
+          </Fold>
         </div>
       </div>
     </div>
+  );
+}
+
+/** A section that opens and closes, with a plus that turns into a minus. */
+function Fold({
+  title,
+  open = false,
+  children,
+}: {
+  title: string;
+  open?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details open={open} className="group border-b border-line">
+      <summary className="flex min-h-14 list-none items-center justify-between gap-4 font-semibold hover:text-white">
+        {title}
+        <span aria-hidden="true" className="relative h-3 w-3 flex-none">
+          <span className="absolute left-0 top-1/2 h-px w-full bg-current" />
+          <span className="absolute left-1/2 top-0 h-full w-px bg-current transition-transform group-open:rotate-90 group-open:opacity-0" />
+        </span>
+      </summary>
+      <div className="pb-5 text-[0.9375rem] text-bone-dim">{children}</div>
+    </details>
   );
 }

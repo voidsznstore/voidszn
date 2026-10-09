@@ -46,7 +46,7 @@ async function Inbox({ searchParams }: Pick<Props, "searchParams">) {
     result = await listMessages(box, { page, q });
   } catch (error) {
     if (!(error instanceof MailError)) throw error;
-    return <p className="border border-accent p-5 text-bone-dim">{error.message}</p>;
+    return <p className="notice p-5 text-bone-dim">{error.message}</p>;
   }
 
   const href = (target: { box?: Box; page?: number; q?: string }) => {
@@ -64,7 +64,7 @@ async function Inbox({ searchParams }: Pick<Props, "searchParams">) {
   return (
     <div className="flex flex-col gap-6">
       {one(params.sent) ? (
-        <p role="status" className="border border-line bg-ash-soft px-4 py-3 text-bone-dim">
+        <p role="status" className="panel px-4 py-3 text-bone-dim">
           Sent.
         </p>
       ) : null}
@@ -75,9 +75,7 @@ async function Inbox({ searchParams }: Pick<Props, "searchParams">) {
             key={key}
             href={href({ box: key, page: 1 })}
             aria-current={key === box ? "page" : undefined}
-            className={`inline-flex min-h-11 items-center border px-4 text-sm font-semibold ${
-              key === box ? "border-bone bg-bone text-void" : "border-line-strong hover:border-bone"
-            }`}
+            className="chip"
           >
             {BOXES[key]}
           </Link>
@@ -87,7 +85,7 @@ async function Inbox({ searchParams }: Pick<Props, "searchParams">) {
       <form key={`${box}|${q}`} className="flex flex-wrap items-end gap-3">
         {box !== "inbox" ? <input type="hidden" name="box" value={box} /> : null}
         <div className="flex min-w-48 flex-1 flex-col gap-1.5">
-          <label htmlFor="mail-q" className="label text-xs text-smoke">
+          <label htmlFor="mail-q" className="label text-smoke">
             Search
           </label>
           <input
@@ -99,13 +97,13 @@ async function Inbox({ searchParams }: Pick<Props, "searchParams">) {
             className="input"
           />
         </div>
-        <button type="submit" className="btn btn-outline min-h-[2.875rem] px-5">
+        <button type="submit" className="btn btn-glass min-h-[2.875rem] px-5">
           Search
         </button>
         {q ? (
           <Link
             href={box === "inbox" ? "/admin/inbox" : "/admin/inbox?box=sent"}
-            className="inline-flex min-h-[2.875rem] items-center text-sm underline underline-offset-4"
+            className="inline-flex min-h-[2.875rem] items-center text-sm link"
           >
             Clear
           </Link>
@@ -113,7 +111,7 @@ async function Inbox({ searchParams }: Pick<Props, "searchParams">) {
       </form>
 
       {result.messages.length === 0 ? (
-        <p className="border border-line bg-ash-soft px-5 py-10 text-center text-bone-dim">
+        <p className="panel px-5 py-10 text-center text-bone-dim">
           {q ? "Nothing matches that search." : "Nothing here yet."}
         </p>
       ) : (
@@ -127,7 +125,7 @@ async function Inbox({ searchParams }: Pick<Props, "searchParams">) {
               <li key={message.uid} className="border-b border-line">
                 <Link
                   href={open(message.uid)}
-                  className="grid min-h-11 gap-x-4 gap-y-0.5 px-2 py-3 hover:bg-ash-soft sm:grid-cols-[14rem_minmax(0,1fr)_auto]"
+                  className="grid min-h-11 gap-x-4 gap-y-0.5 px-2 py-3 hover:bg-white/[0.04] sm:grid-cols-[14rem_minmax(0,1fr)_auto]"
                 >
                   <span className={`truncate ${message.unread ? "font-semibold text-white" : "text-bone-dim"}`}>
                     {message.unread ? <span className="sr-only">Unread: </span> : null}
@@ -159,7 +157,7 @@ async function Inbox({ searchParams }: Pick<Props, "searchParams">) {
       {result.pages > 1 ? (
         <nav aria-label="Pages" className="flex flex-wrap items-center gap-4 text-sm">
           {result.page > 1 ? (
-            <Link href={href({ page: result.page - 1 })} className="inline-flex min-h-11 items-center underline underline-offset-4">
+            <Link href={href({ page: result.page - 1 })} className="inline-flex min-h-11 items-center link">
               Newer
             </Link>
           ) : null}
@@ -167,7 +165,7 @@ async function Inbox({ searchParams }: Pick<Props, "searchParams">) {
             Page {result.page} of {result.pages}
           </span>
           {result.page < result.pages ? (
-            <Link href={href({ page: result.page + 1 })} className="inline-flex min-h-11 items-center underline underline-offset-4">
+            <Link href={href({ page: result.page + 1 })} className="inline-flex min-h-11 items-center link">
               Older
             </Link>
           ) : null}

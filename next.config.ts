@@ -17,6 +17,19 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async headers() {
+    return [
+      {
+        // The logo and font that emails load. Mail apps fetch them from other
+        // origins, and a font is refused without this.
+        source: "/email/:file*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Cache-Control", value: "public, max-age=604800" },
+        ],
+      },
+    ];
+  },
   turbopack: {
     rules: {
       "*.css": {

@@ -18,13 +18,13 @@ export function UnsubscribeForm({ token, email }: { token: string; email: string
   }
 
   return (
-    <form action={action} className="flex flex-col items-start gap-4">
+    <form action={action} className="flex flex-col items-center gap-4">
       <input type="hidden" name="token" value={token} />
       <p className="text-bone-dim">Stop sending marketing emails to {email}?</p>
       <button type="submit" disabled={pending} className="btn btn-accent disabled:opacity-60">
         {pending ? "Unsubscribing…" : "Unsubscribe"}
       </button>
-      <p role="alert" className="text-sm text-accent">
+      <p role="alert" className="text-sm text-ember">
         {state.error}
       </p>
     </form>

@@ -18,31 +18,37 @@ export const metadata: Metadata = {
 export default function PanelLayout({ children }: LayoutProps<"/admin">) {
   return (
     <div className="flex flex-1 flex-col md:flex-row">
-      <aside className="flex flex-col gap-4 border-b border-line px-4 py-4 md:w-56 md:flex-none md:border-b-0 md:border-r md:py-6">
-        <div className="flex items-center justify-between gap-4 md:flex-col md:items-start">
-          <Link href="/admin" aria-label="Admin overview" className="inline-flex min-h-11 items-center">
-            <EclipseLogo size={24} />
-          </Link>
-          <span className="label text-xs text-smoke">Admin</span>
-        </div>
-        <Suspense fallback={<NavLinks pathname={null} />}>
-          <AdminNav />
-        </Suspense>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm md:mt-auto md:flex-col md:items-start">
-          <Suspense fallback={null}>
-            <Identity />
+      <aside className="p-3 pb-0 md:sticky md:top-0 md:h-dvh md:w-64 md:flex-none md:pb-3 md:pr-0">
+        <div className="glass flex h-full flex-col gap-4 rounded-[1.75rem] p-4">
+          <div className="flex items-center justify-between gap-4 px-1">
+            <Link
+              href="/admin"
+              aria-label="Admin overview"
+              className="inline-flex h-12 items-center px-3"
+            >
+              <EclipseLogo size={24} />
+            </Link>
+            <span className="tag tag-mute">Admin</span>
+          </div>
+          <Suspense fallback={<NavLinks pathname={null} />}>
+            <AdminNav />
           </Suspense>
-          {/* Not prefetched: store pages shouldn't be rebuilt just because the admin is open. */}
-          <Link
-            href="/"
-            prefetch={false}
-            className="inline-flex min-h-11 items-center text-smoke underline underline-offset-4 hover:text-bone"
-          >
-            View store
-          </Link>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 text-sm md:mt-auto md:flex-col md:items-start md:border-t md:border-line md:pt-3">
+            <Suspense fallback={null}>
+              <Identity />
+            </Suspense>
+            {/* Not prefetched: store pages shouldn't be rebuilt just because the admin is open. */}
+            <Link
+              href="/"
+              prefetch={false}
+              className="link inline-flex min-h-11 items-center text-smoke"
+            >
+              View store
+            </Link>
+          </div>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 px-4 py-8 sm:px-8">{children}</main>
+      <main className="min-w-0 flex-1 px-4 py-8 sm:px-8 md:py-9">{children}</main>
     </div>
   );
 }
@@ -52,7 +58,7 @@ async function Identity() {
   if (!admin?.twoStep) return null;
   return (
     <>
-      <span className="text-bone-dim">{admin.name}</span>
+      <span className="font-semibold text-bone">{admin.name}</span>
       <SignOutButton />
     </>
   );

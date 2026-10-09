@@ -20,7 +20,7 @@ async function main() {
   const db = getDb();
   const run = randomUUID().slice(0, 8);
   const subject = `Campaign test ${run}`;
-  const content = { subject, preheader: "", body: "Hello.", imageUrl: null, buttonLabel: "", buttonUrl: "" };
+  const content = { subject, preheader: "", heading: "", body: "Hello.", imageUrl: null, buttonLabel: "", buttonUrl: "", discountCodeId: null };
 
   await db.insert(customers).values(
     Array.from({ length: PEOPLE }, (_, index) => ({

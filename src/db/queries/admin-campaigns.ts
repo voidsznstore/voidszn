@@ -1,17 +1,27 @@
 import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import type { Database } from "../index";
-import { campaignSends, campaigns, customers, emailOptouts, subscribers } from "../schema";
+import {
+  abandonedCarts,
+  campaignSends,
+  campaigns,
+  customers,
+  emailOptouts,
+  orders,
+  subscribers,
+} from "../schema";
 import { FormError } from "./admin-catalog";
 import { listMarketingRecipients } from "./admin-customers";
 
 export type CampaignInput = {
   subject: string;
   preheader: string;
+  heading: string;
   body: string;
   imageUrl: string | null;
   buttonLabel: string;
   buttonUrl: string;
+  discountCodeId: string | null;
 };
 
 export type SendCounts = { total: number; sent: number; failed: number; skipped: number; pending: number };
@@ -66,7 +76,9 @@ export async function getCampaign(db: Database, id: string) {
 const fields = (input: CampaignInput) => ({
   subject: input.subject.trim(),
   preheader: input.preheader.trim() || null,
+  heading: input.heading.trim() || null,
   body: input.body.trim(),
+  discountCodeId: input.discountCodeId,
   imageUrl: input.imageUrl,
   buttonLabel: input.buttonLabel.trim() || null,
   buttonUrl: input.buttonUrl.trim() || null,
@@ -297,7 +309,18 @@ export async function emailForToken(db: Database, token: string): Promise<string
     .from(campaignSends)
     .where(eq(campaignSends.token, token))
     .limit(1);
-  return row?.email ?? null;
+  if (row) return row.email;
+  // Cart reminders carry the cart's own token.
+  const [cart] = await db
+    .select({ email: abandonedCarts.email })
+    .from(abandonedCarts)
+    .where(eq(abandonedCarts.recoveryToken, token))
+    .limit(1);
+  if (cart) return cart.email;
+  // The "delivered" email, when it carries a thank-you code, uses the order's own id.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) return null;
+  const [order] = await db.select({ email: orders.email }).from(orders).where(eq(orders.id, token)).limit(1);
+  return order?.email ?? null;
 }
 
 /** Stops all marketing email to an address. Safe to do more than once. */

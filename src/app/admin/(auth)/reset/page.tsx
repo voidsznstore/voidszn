@@ -33,7 +33,7 @@ async function Reset({ searchParams }: Pick<PageProps<"/admin/reset">, "searchPa
         <p className="text-bone-dim">
           This reset link has been used or has expired. Ask for a new one.
         </p>
-        <Link href="/admin/forgot" className="btn btn-outline">
+        <Link href="/admin/forgot" className="btn btn-glass">
           Send a new link
         </Link>
       </div>
