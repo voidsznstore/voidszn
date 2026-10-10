@@ -1,3 +1,5 @@
+"use client";
+
 import type { CSSProperties } from "react";
 import type { Banner } from "@/lib/banner/shape";
 
@@ -12,6 +14,11 @@ const MAX_REPEATS = 120;
  * The moving banner under the header. The messages run in a loop, separated by
  * a small eclipse. Hovering pauses it. For anyone who has asked their device to
  * cut down on motion it stands still.
+ *
+ * This is a client component on purpose. The header is sent again with every
+ * page a visitor moves to, and as a server component all the repeated copies
+ * below went with it each time. This way only the messages themselves are sent,
+ * and the copies are made in the browser.
  */
 export function BannerStrip({ banner }: { banner: Banner }) {
   if (!banner.enabled || banner.messages.length === 0) return null;
